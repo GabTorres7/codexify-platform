@@ -125,6 +125,17 @@ class GitHubService:
                 )
             return str(resp.json()["id"])
 
+    async def post_pr_comment(self, full_name: str, pr_number: str, body: str) -> dict:
+        """Post a comment on a GitHub pull request."""
+        async with self._client() as client:
+            resp = await client.post(
+                f"{GITHUB_API}/repos/{full_name}/issues/{pr_number}/comments",
+                json={"body": body},
+            )
+            if not resp.is_success:
+                raise GitPlatformError("github", f"Failed to post comment: {resp.status_code}")
+            return resp.json()
+
     async def delete_webhook(self, full_name: str, webhook_id: str) -> None:
         async with self._client() as client:
             await client.delete(

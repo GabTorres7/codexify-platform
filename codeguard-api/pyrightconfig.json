@@ -2,5 +2,12 @@
   "venvPath": ".",
   "venv": ".venv",
   "pythonVersion": "3.12",
-  "pythonPlatform": "Windows"
+  "pythonPlatform": "Windows",
+  "typeCheckingMode": "off",
+  "executionEnvironments": [
+    {
+      "root": ".",
+      "pythonVersion": "3.12"
+    }
+  ]
 }

@@ -88,7 +88,7 @@ async def delete_rule(
     )
     if not existing.data:
         raise NotFoundError("Rule", str(rule_id))
-    if existing.data[0]["is_builtin"]:
+    if existing.data[0]["is_builtin"]:  # type: ignore[index]
         raise ForbiddenError("Built-in rules cannot be deleted — disable them instead")
 
     svc = RuleService(db)

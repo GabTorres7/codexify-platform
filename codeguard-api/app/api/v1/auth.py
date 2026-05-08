@@ -19,10 +19,74 @@ from app.models.user import (
     APIKeyOut,
     LoginRequest,
     RefreshRequest,
+    RegisterRequest,
     TokenOut,
 )
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
+
+
+@router.post("/register", response_model=TokenOut)
+async def register(body: RegisterRequest):
+    """
+    Register a new user. Creates the user in the DB and returns JWT tokens.
+    If no organization exists yet, creates a default one.
+    """
+    from app.core.security import hash_password as _hash
+
+    name = body.name.strip()
+    email = body.email.strip()
+    password = body.password
+
+    if not name or not email or len(password) < 6:
+        raise UnauthorizedError("Nome, e-mail e senha (min 6 chars) são obrigatórios")
+
+    db = await get_supabase()
+
+    # Check if email already exists
+    existing = await db.table("users").select("id").eq("email", email).execute()
+    if existing.data:
+        raise UnauthorizedError("Este e-mail já está cadastrado. Faça login.")
+
+    # Find or create a default org
+    orgs_resp = await db.table("organizations").select("id").limit(1).execute()
+    if orgs_resp.data:
+        org_id = orgs_resp.data[0]["id"]  # type: ignore[index]
+    else:
+        # Create default org
+        from datetime import UTC, datetime
+        org_resp = await db.table("organizations").insert({
+            "name": "Minha Organização",
+            "slug": "minha-org",
+            "created_at": datetime.now(UTC).isoformat(),
+        }).execute()
+        org_id = org_resp.data[0]["id"]  # type: ignore[index]
+        # Create default settings
+        await db.table("org_settings").insert({"org_id": org_id}).execute()
+
+    initials = "".join(w[0].upper() for w in name.split()[:2]) or "U"
+
+    # Generate a default avatar color
+    colors = ["#818cf8", "#f472b6", "#34d399", "#fbbf24", "#60a5fa", "#a78bfa", "#f87171"]
+    color = colors[sum(ord(c) for c in email) % len(colors)]
+
+    user_resp = await db.table("users").insert({
+        "org_id": org_id,
+        "email": email,
+        "name": name,
+        "initials": initials,
+        "color": color,
+        "role": "admin",
+        "hashed_password": _hash(password),
+        "is_active": True,
+    }).execute()
+
+    user = user_resp.data[0]  # type: ignore[index]
+    payload = {"sub": user["id"], "org_id": str(org_id)}
+    return TokenOut(
+        access_token=create_access_token(payload),
+        refresh_token=create_refresh_token(payload),
+    )
 
 
 @router.post("/login", response_model=TokenOut)
@@ -38,7 +102,7 @@ async def login(body: LoginRequest):
     if not resp.data:
         raise UnauthorizedError("Invalid email or password")
 
-    user = resp.data[0]
+    user = resp.data[0]  # type: ignore[index]
     if not verify_password(body.password, user["hashed_password"] or ""):
         raise UnauthorizedError("Invalid email or password")
 
@@ -86,7 +150,7 @@ async def create_api_key(
         payload["expires_at"] = body.expires_at.isoformat()
 
     resp = await db.table("api_keys").insert(payload).execute()
-    row = resp.data[0]
+    row = resp.data[0]  # type: ignore[index]
     return APIKeyCreatedOut(**row, plain_key=plain)
 
 

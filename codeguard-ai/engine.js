@@ -1,5 +1,5 @@
 /* ================================================
-   CodeGuard AI - Analysis Engine (Simulated)
+   Codexfy AI - Analysis Engine
    ================================================ */
 
 const AnalysisEngine = {
@@ -73,11 +73,11 @@ const AnalysisEngine = {
     },
 
     /**
-     * Format time ago
+     * Format time ago — now uses real current time
      */
     timeAgo(dateStr) {
         const date = new Date(dateStr);
-        const now = new Date('2026-03-06T11:20:00');
+        const now = new Date();
         const diffMs = now - date;
         const diffMin = Math.floor(diffMs / 60000);
         const diffH = Math.floor(diffMin / 60);
@@ -87,7 +87,8 @@ const AnalysisEngine = {
         if (diffMin < 60) return `${diffMin}min atrás`;
         if (diffH < 24) return `${diffH}h atrás`;
         if (diffD === 1) return 'ontem';
-        return `${diffD}d atrás`;
+        if (diffD < 30) return `${diffD}d atrás`;
+        return `${Math.floor(diffD / 30)}m atrás`;
     },
 
     /**
@@ -122,5 +123,33 @@ const AnalysisEngine = {
         const total = mrs.filter(m => m.aiScore !== null).length;
         const avgScore = total > 0 ? Math.round(mrs.filter(m => m.aiScore !== null).reduce((s, m) => s + m.aiScore, 0) / total) : 0;
         return { pending, approved, withIssues, avgScore, total };
+    },
+
+    /**
+     * Export MRs to CSV
+     */
+    exportCSV(mrs) {
+        const headers = ['ID', 'Título', 'Branch', 'Branch Alvo', 'Autor', 'Status', 'Score IA', 'Adições', 'Remoções', 'Arquivos Alterados', 'Criado Em'];
+        const rows = mrs.map(mr => [
+            mr.id,
+            `"${mr.title.replace(/"/g, '""')}"`,
+            mr.branch,
+            mr.targetBranch,
+            mr.author.name,
+            mr.status,
+            mr.aiScore ?? 'Analisando',
+            mr.additions,
+            mr.deletions,
+            mr.filesChanged,
+            new Date(mr.createdAt).toLocaleString('pt-BR')
+        ]);
+        const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+        const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `codexfy_merge_requests_${new Date().toISOString().slice(0, 10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
     }
 };

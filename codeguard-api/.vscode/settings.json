@@ -1,8 +1,9 @@
 {
-  "python.defaultInterpreterPath": "c:\\Users\\Rock\\Downloads\\codeGuard-main\\codeGuard-main\\codeguard-api\\.venv\\Scripts\\python.exe",
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
   "python.terminal.activateEnvironment": true,
-  "python.analysis.extraPaths": [
-    "c:\\Users\\Rock\\Downloads\\codeGuard-main\\codeGuard-main\\codeguard-api"
-  ],
-  "python.envFile": "c:\\Users\\Rock\\Downloads\\codeGuard-main\\codeGuard-main\\codeguard-api\\.env"
+  "python.analysis.extraPaths": ["${workspaceFolder}"],
+  "python.analysis.typeCheckingMode": "off",
+  "python.analysis.autoSearchPaths": true,
+  "python.envFile": "${workspaceFolder}/.env",
+  "python.analysis.pythonPath": "${workspaceFolder}/.venv/Scripts/python.exe"
 }

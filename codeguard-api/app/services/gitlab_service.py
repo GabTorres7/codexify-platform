@@ -90,6 +90,17 @@ class GitLabService:
                 )
             return str(resp.json()["id"])
 
+    async def post_mr_comment(self, project_id: str, mr_iid: str, body: str) -> dict:
+        """Post a note (comment) on a GitLab merge request."""
+        async with self._client() as client:
+            resp = await client.post(
+                f"{self._base}/projects/{project_id}/merge_requests/{mr_iid}/notes",
+                json={"body": body},
+            )
+            if not resp.is_success:
+                raise GitPlatformError("gitlab", f"Failed to post comment: {resp.status_code}")
+            return resp.json()
+
     async def delete_webhook(self, project_id: str, webhook_id: str) -> None:
         async with self._client() as client:
             await client.delete(

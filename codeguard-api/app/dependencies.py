@@ -48,7 +48,7 @@ async def get_current_user(
         )
         if not key_resp.data:
             raise UnauthorizedError("Invalid API key")
-        key_row = key_resp.data[0]
+        key_row = key_resp.data[0]  # type: ignore[index]
 
         if key_row.get("expires_at") and datetime.fromisoformat(
             key_row["expires_at"]
@@ -86,7 +86,7 @@ async def get_current_user(
     if not user_resp.data:
         raise UnauthorizedError("User not found or inactive")
 
-    return user_resp.data[0]
+    return user_resp.data[0]  # type: ignore[index]
 
 
 def require_org_access(org_id: UUID):

@@ -21,6 +21,14 @@ class Settings(BaseSettings):
     @classmethod
     def parse_origins(cls, v):
         if isinstance(v, str):
+            v = v.strip()
+            # Handle JSON array format: ["url1","url2"]
+            if v.startswith("["):
+                import json
+                try:
+                    return json.loads(v)
+                except json.JSONDecodeError:
+                    pass
             return [o.strip() for o in v.split(",") if o.strip()]
         return v
 
@@ -49,6 +57,11 @@ class Settings(BaseSettings):
 
     # Public URL (used when registering webhooks on git platforms)
     public_api_url: str = "https://localhost:8000"
+
+    # Stripe (optional — billing works without it using free plan switching)
+    stripe_secret_key: str = ""
+    stripe_webhook_secret: str = ""
+    stripe_publishable_key: str = ""
 
     # Notifications
     smtp_host: str = ""

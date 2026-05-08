@@ -43,7 +43,7 @@ async def github_webhook(
     if not repo_resp.data:
         raise HTTPException(status_code=404, detail="Repository not registered")
 
-    repo = repo_resp.data[0]
+    repo = repo_resp.data[0]  # type: ignore[index]
 
     # Verify signature
     if not verify_github_signature(payload_bytes, x_hub_signature_256, repo["webhook_secret"]):
@@ -86,9 +86,9 @@ async def github_webhook(
                 "status": "pending",
             }
         ).execute()
-        mr_id = mr_insert.data[0]["id"]
+        mr_id = mr_insert.data[0]["id"]  # type: ignore[index]
     else:
-        mr_id = mr_resp.data[0]["id"]
+        mr_id = mr_resp.data[0]["id"]  # type: ignore[index]
 
     if repo["auto_analyze"]:
         from uuid import UUID
@@ -121,7 +121,7 @@ async def gitlab_webhook(
     if not repo_resp.data:
         raise HTTPException(status_code=404, detail="Repository not registered")
 
-    repo = repo_resp.data[0]
+    repo = repo_resp.data[0]  # type: ignore[index]
 
     if not verify_gitlab_token(x_gitlab_token, repo["webhook_secret"]):
         raise HTTPException(status_code=403, detail="Invalid webhook token")
@@ -158,9 +158,9 @@ async def gitlab_webhook(
                 "status": "pending",
             }
         ).execute()
-        mr_id = mr_insert.data[0]["id"]
+        mr_id = mr_insert.data[0]["id"]  # type: ignore[index]
     else:
-        mr_id = mr_resp.data[0]["id"]
+        mr_id = mr_resp.data[0]["id"]  # type: ignore[index]
 
     if repo["auto_analyze"]:
         from uuid import UUID

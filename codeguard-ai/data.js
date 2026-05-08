@@ -1,5 +1,5 @@
 /* ================================================
-   CodeGuard AI - Mock Data
+   Codexfy AI - Mock Data
    ================================================ */
 
 const TEAM_MEMBERS = [

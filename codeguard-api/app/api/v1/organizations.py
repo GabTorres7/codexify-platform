@@ -32,7 +32,9 @@ async def create_org(body: OrganizationCreate):
         raise ConflictError(f"Slug '{body.slug}' is already taken")
 
     org_resp = await db.table("organizations").insert(body.model_dump()).execute()
-    org = org_resp.data[0]
+    if not org_resp.data:
+        raise ConflictError("Failed to create organization")
+    org = org_resp.data[0]  # type: ignore[index]
 
     # Create default org settings
     await db.table("org_settings").insert({"org_id": org["id"]}).execute()
@@ -71,7 +73,7 @@ async def get_org(
     )
     if not resp.data:
         raise NotFoundError("Organization", str(org_id))
-    return resp.data[0]
+    return resp.data[0]  # type: ignore[index]
 
 
 @router.patch("/{org_id}", response_model=OrganizationOut)
@@ -91,7 +93,7 @@ async def update_org(
     )
     if not resp.data:
         raise NotFoundError("Organization", str(org_id))
-    return resp.data[0]
+    return resp.data[0]  # type: ignore[index]
 
 
 @router.get("/{org_id}/settings", response_model=OrgSettingsOut)
@@ -105,7 +107,7 @@ async def get_org_settings(
     )
     if not resp.data:
         raise NotFoundError("Org settings", str(org_id))
-    return resp.data[0]
+    return resp.data[0]  # type: ignore[index]
 
 
 @router.put("/{org_id}/settings", response_model=OrgSettingsOut)
@@ -123,7 +125,9 @@ async def update_org_settings(
         .eq("org_id", str(org_id))
         .execute()
     )
-    return resp.data[0]
+    if not resp.data:
+        raise NotFoundError("Org settings", str(org_id))
+    return resp.data[0]  # type: ignore[index]
 
 
 @router.get("/{org_id}/members", response_model=list[UserOut])
@@ -157,14 +161,57 @@ async def invite_member(
     initials = "".join(w[0].upper() for w in body.name.split()[:2])
     temp_password = secrets.token_urlsafe(16)
 
+    # Generate a default avatar color
+    colors = ["#818cf8", "#f472b6", "#34d399", "#fbbf24", "#60a5fa", "#a78bfa", "#f87171"]
+    color = colors[sum(ord(c) for c in body.email) % len(colors)]
+
     resp = await db.table("users").insert(
         {
             "org_id": str(org_id),
             "email": body.email,
             "name": body.name,
             "initials": initials,
+            "color": color,
             "role": body.role,
             "hashed_password": hash_password(temp_password),
         }
     ).execute()
-    return resp.data[0]
+    return resp.data[0]  # type: ignore[index]
+
+
+@router.patch("/{org_id}/members/{user_id}", response_model=UserOut)
+async def update_member(
+    org_id: UUID,
+    user_id: UUID,
+    body: dict,
+    _current_user: dict = Depends(require_admin),
+):
+    """Update a team member's profile (name, role, color)."""
+    db = await get_supabase()
+
+    existing = (
+        await db.table("users")
+        .select("id")
+        .eq("id", str(user_id))
+        .eq("org_id", str(org_id))
+        .execute()
+    )
+    if not existing.data:
+        raise NotFoundError("User", str(user_id))
+
+    allowed = {"name", "role", "color", "initials"}
+    data = {k: v for k, v in body.items() if k in allowed and v is not None}
+    if not data:
+        return existing.data[0]  # type: ignore[index]
+
+    if "name" in data:
+        data["initials"] = "".join(w[0].upper() for w in data["name"].split()[:2])
+
+    resp = (
+        await db.table("users")
+        .update(data)
+        .eq("id", str(user_id))
+        .eq("org_id", str(org_id))
+        .execute()
+    )
+    return resp.data[0]  # type: ignore[index]

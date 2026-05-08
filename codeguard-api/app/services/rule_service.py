@@ -63,7 +63,7 @@ class RuleService:
     async def create_rule(self, org_id: UUID, data: dict) -> dict:
         payload = {"org_id": str(org_id), **data}
         resp = await self._db.table("rules").insert(payload).execute()
-        return resp.data[0]
+        return resp.data[0]  # type: ignore[index]
 
     async def update_rule(self, rule_id: UUID, data: dict) -> dict | None:
         from datetime import UTC, datetime
@@ -74,7 +74,7 @@ class RuleService:
             .eq("id", str(rule_id))
             .execute()
         )
-        return resp.data[0] if resp.data else None
+        return resp.data[0] if resp.data else None  # type: ignore[index]
 
     async def delete_rule(self, rule_id: UUID) -> bool:
         resp = (

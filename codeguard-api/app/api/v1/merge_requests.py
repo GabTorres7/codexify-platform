@@ -67,7 +67,7 @@ async def get_merge_request(
     if not mr_resp.data:
         raise NotFoundError("Merge request", str(mr_id))
 
-    mr = mr_resp.data[0]
+    mr = mr_resp.data[0]  # type: ignore[index]
 
     # Load the latest completed analysis
     analysis_resp = (
@@ -86,7 +86,7 @@ async def get_merge_request(
     categories = None
 
     if analysis_resp.data:
-        analysis = analysis_resp.data[0]
+        analysis = analysis_resp.data[0]  # type: ignore[index]
         analysis_id = analysis["id"]
 
         issues_resp = (
@@ -201,6 +201,50 @@ async def trigger_analysis(
         status="queued",
         message="Analysis started — poll GET /analyses/{analysis_id} for results",
     )
+
+
+@router.get("/{mr_id}/diff")
+async def get_mr_diff(
+    org_id: UUID,
+    repo_id: UUID,
+    mr_id: UUID,
+    current_user: dict = Depends(get_current_user),
+):
+    """Fetch the raw diff data for a merge request from the git platform."""
+    db = await get_supabase()
+
+    mr_resp = (
+        await db.table("merge_requests")
+        .select("*, repositories(*)")
+        .eq("id", str(mr_id))
+        .eq("repo_id", str(repo_id))
+        .single()
+        .execute()
+    )
+    if not mr_resp.data:
+        raise NotFoundError("Merge request", str(mr_id))
+
+    mr = mr_resp.data
+    repo = mr["repositories"]
+
+    from app.services.git_platform_factory import get_git_service
+
+    git_svc = get_git_service(repo["platform"], repo["access_token"])
+
+    if repo["platform"] == "github":
+        file_diffs = await git_svc.get_pr_diff(repo["full_name"], mr["platform_id"])
+    else:
+        file_diffs = await git_svc.get_mr_diff(repo["platform_id"], mr["platform_id"])
+
+    return [
+        {
+            "file": f.file,
+            "diff_text": f.diff_text,
+            "additions": f.additions,
+            "deletions": f.deletions,
+        }
+        for f in file_diffs
+    ]
 
 
 @router.get("/{mr_id}/analyses", response_model=list[dict])

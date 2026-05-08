@@ -71,7 +71,7 @@ async def _add_single_repo(org_id: UUID, body: RepositoryCreate, db) -> dict:
         "webhook_secret": webhook_secret,
     }
     resp = await db.table("repositories").insert(row).execute()
-    return resp.data[0]
+    return resp.data[0]  # type: ignore[index]
 
 
 async def _register_webhook_bg(repo_row: dict) -> None:
@@ -174,7 +174,7 @@ async def get_repository(
     )
     if not resp.data:
         raise NotFoundError("Repository", str(repo_id))
-    return resp.data[0]
+    return resp.data[0]  # type: ignore[index]
 
 
 @router.patch("/{repo_id}", response_model=RepositoryOut)
@@ -195,7 +195,7 @@ async def update_repository(
     )
     if not resp.data:
         raise NotFoundError("Repository", str(repo_id))
-    return resp.data[0]
+    return resp.data[0]  # type: ignore[index]
 
 
 @router.delete("/{repo_id}", status_code=204)
@@ -216,7 +216,7 @@ async def delete_repository(
     if not repo_resp.data:
         raise NotFoundError("Repository", str(repo_id))
 
-    repo = repo_resp.data[0]
+    repo = repo_resp.data[0]  # type: ignore[index]
 
     # Delete webhook from platform
     if repo.get("webhook_id"):
@@ -251,9 +251,25 @@ async def sync_repository(
     if not repo_resp.data:
         raise NotFoundError("Repository", str(repo_id))
 
-    repo = repo_resp.data[0]
+    repo = repo_resp.data[0]  # type: ignore[index]
     background_tasks.add_task(_sync_mrs_bg, repo)
     return {"message": "Sync started", "repo_id": str(repo_id)}
+
+
+@router.get("/{repo_id}/rules")
+async def get_repo_rules(
+    org_id: UUID,
+    repo_id: UUID,
+    active_only: bool = Query(False),
+    current_user: dict = Depends(get_current_user),
+):
+    """List rules applicable to this repo (org-wide defaults + repo-specific overrides)."""
+    db = await get_supabase()
+    from app.services.rule_service import RuleService
+    svc = RuleService(db)
+    if active_only:
+        return await svc.get_effective_rules(org_id, repo_id)
+    return await svc.list_rules(org_id, repo_id=repo_id)
 
 
 async def _sync_mrs_bg(repo: dict) -> None:
@@ -299,7 +315,7 @@ async def _sync_mrs_bg(repo: dict) -> None:
             )
             if existing.data:
                 await db.table("merge_requests").update(payload).eq(
-                    "id", existing.data[0]["id"]
+                    "id", existing.data[0]["id"]  # type: ignore[index]
                 ).execute()
             else:
                 payload["status"] = "pending"

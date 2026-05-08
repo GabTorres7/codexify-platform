@@ -1,4 +1,4 @@
-# CodeGuard API
+# Codexfy API
 
 API Python (FastAPI) para análise automatizada de Merge Requests com IA.
 

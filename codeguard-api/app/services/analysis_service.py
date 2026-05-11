@@ -14,7 +14,7 @@ import structlog
 
 from app.core.exceptions import AIServiceError, GitPlatformError
 from app.db.client import get_supabase
-from app.services.claude_service import ClaudeService
+from app.services.ai_factory import get_ai_service
 from app.services.git_platform_factory import get_git_service
 from app.services.rule_service import RuleService
 
@@ -37,7 +37,7 @@ def compute_weighted_score(result: dict) -> int:
 
 class AnalysisService:
     def __init__(self):
-        self._claude = ClaudeService()
+        self._ai = get_ai_service()
 
     async def trigger_analysis(self, mr_id: UUID) -> UUID:
         """
@@ -110,7 +110,7 @@ class AnalysisService:
             )
 
             # 3. Call Claude
-            claude_result = await self._claude.analyze_merge_request(
+            claude_result = await self._ai.analyze_merge_request(
                 mr_title=mr["title"],
                 mr_description=mr.get("description") or "",
                 files_diff=files_diff,
@@ -331,7 +331,7 @@ class AnalysisService:
                     org_rules = await rule_svc.list_rules(UUID(org_id), active_only=True)
 
             # Call Claude
-            claude_result = await self._claude.analyze_merge_request(
+            claude_result = await self._ai.analyze_merge_request(
                 mr_title=mr_title,
                 mr_description=mr_description or "",
                 files_diff=files_diff,

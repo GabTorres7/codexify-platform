@@ -38,10 +38,18 @@ class Settings(BaseSettings):
     supabase_service_role_key: str = ""
     database_url: str = ""
 
-    # Claude AI
+    # AI Provider ("anthropic" or "openai")
+    ai_provider: str = "anthropic"
+
+    # Anthropic (Claude)
     anthropic_api_key: str = ""
     claude_model: str = "claude-sonnet-4-6"
     claude_max_tokens: int = 4096
+
+    # OpenAI (GPT)
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o"
+    openai_max_tokens: int = 4096
 
     # JWT
     jwt_algorithm: str = "HS256"

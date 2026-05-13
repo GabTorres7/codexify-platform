@@ -102,11 +102,10 @@ async def chat_with_analysis(
     current_user: dict = Depends(get_current_user),
 ):
     """
-    Ask Claude a follow-up question about a specific analysis/MR.
+    Ask a follow-up question about a specific analysis/MR.
     Body: { "question": "gere um teste para este método" }
     Returns: { "answer": "..." }
     """
-    import anthropic
     from app.config import get_settings
 
     question = body.get("question", "").strip()
@@ -155,18 +154,32 @@ Security: {detail.get('score_security')}, Performance: {detail.get('score_perfor
 {json.dumps(detail.get('raw_claude_response', {}), indent=2)[:3000]}"""
 
     settings = get_settings()
-    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    system_msg = "You are CodeGuard AI assistant. Answer questions about code reviews and merge requests. Respond in the same language as the user's question. Be concise and actionable."
+    user_msg = f"Context of the analyzed MR:\n{context}\n\n---\n\nUser question: {question}"
 
     try:
-        response = await client.messages.create(
-            model=settings.claude_model,
-            max_tokens=2048,
-            system="You are CodeGuard AI assistant. Answer questions about code reviews and merge requests. Respond in the same language as the user's question. Be concise and actionable.",
-            messages=[
-                {"role": "user", "content": f"Context of the analyzed MR:\n{context}\n\n---\n\nUser question: {question}"},
-            ],
-        )
-        answer = response.content[0].text
+        if settings.ai_provider.lower() == "openai":
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI(api_key=settings.openai_api_key)
+            response = await client.chat.completions.create(
+                model=settings.openai_model,
+                max_tokens=2048,
+                messages=[
+                    {"role": "system", "content": system_msg},
+                    {"role": "user", "content": user_msg},
+                ],
+            )
+            answer = response.choices[0].message.content or ""
+        else:
+            import anthropic
+            client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+            response = await client.messages.create(
+                model=settings.claude_model,
+                max_tokens=2048,
+                system=system_msg,
+                messages=[{"role": "user", "content": user_msg}],
+            )
+            answer = response.content[0].text
     except Exception as exc:
         logger.error("chat_error", error=str(exc))
         answer = f"Erro ao consultar IA: {exc}"

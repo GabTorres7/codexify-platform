@@ -56,6 +56,45 @@
         return false;
     }
 
+    // ── Current user role ───────────────────────────────────
+    // Default to admin so existing users see everything.
+    // The /me endpoint will downgrade to 'member' if needed.
+    let currentUserRole = 'admin';
+    let currentUserId = '';
+    let roleLoaded = false;
+
+    async function loadMyRole() {
+        try {
+            const authed = await ensureAuth();
+            if (!authed || !ORG_ID) return;
+            const me = await api('GET', `/orgs/${ORG_ID}/me`);
+            currentUserRole = me.role || 'admin';
+            currentUserId = me.id || '';
+        } catch (_) {
+            currentUserRole = 'admin';
+        }
+        roleLoaded = true;
+        applyRoleRestrictions();
+    }
+
+    function isAdmin() { return currentUserRole === 'admin'; }
+
+    function applyRoleRestrictions() {
+        // Hide admin-only nav items for regular members
+        const adminPages = ['team', 'settings', 'billing', 'rules'];
+        document.querySelectorAll('.nav-item').forEach(item => {
+            const page = item.dataset.page;
+            if (adminPages.includes(page)) {
+                item.style.display = isAdmin() ? '' : 'none';
+            }
+        });
+        // Re-render current page to apply button restrictions
+        if (roleLoaded) renderPage();
+    }
+
+    // Load role on startup
+    (async () => { await loadMyRole(); })();
+
     // ── Cached data ─────────────────────────────────────────
     let cachedRepos = [];
     let cachedMRs = [];
@@ -431,10 +470,10 @@
         pageContent.innerHTML = `
             <div class="page-header-row">
                 <div><h1 class="page-title">Repositorios</h1><p class="page-subtitle">Gerencie os repositorios monitorados pela IA</p></div>
-                <div class="page-actions">
-                    <button class="btn btn-secondary" id="btnBulkAdd">📦 Importar em Massa</button>
+                ${isAdmin() ? `<div class="page-actions">
+                    <button class="btn btn-secondary" id="btnBulkAdd">Importar em Massa</button>
                     <button class="btn btn-primary" id="btnAddRepo">+ Adicionar Repositorio</button>
-                </div>
+                </div>` : ''}
             </div>
 
             <!-- How to add -->
@@ -466,8 +505,8 @@
                 ${showLoading()}
             </div>`;
 
-        $('btnAddRepo').addEventListener('click', openAddRepoModal);
-        $('btnBulkAdd').addEventListener('click', openBulkAddModal);
+        if ($('btnAddRepo')) $('btnAddRepo').addEventListener('click', openAddRepoModal);
+        if ($('btnBulkAdd')) $('btnBulkAdd').addEventListener('click', openBulkAddModal);
         attachExampleRepoListeners();
         loadRepos();
     }
@@ -486,10 +525,10 @@
                     <div class="repo-card">
                         <div class="repo-card-top">
                             <div class="repo-platform-badge ${r.platform}">${r.platform === 'github' ? '⬡ GitHub' : '🦊 GitLab'}</div>
-                            <div class="repo-actions">
+                            ${isAdmin() ? `<div class="repo-actions">
                                 <button class="btn-icon" title="Sincronizar" data-sync="${r.id}">🔄</button>
                                 <button class="btn-icon btn-danger" title="Remover" data-del="${r.id}">🗑</button>
-                            </div>
+                            </div>` : ''}
                         </div>
                         <div class="repo-card-name">${esc(r.full_name)}</div>
                         <div class="repo-card-branch">Branch: ${r.default_branch}</div>
@@ -566,12 +605,10 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
         pageContent.innerHTML = `
             <div class="page-header-row">
                 <div><h1 class="page-title">Equipe</h1><p class="page-subtitle">Gerencie os membros da organizacao</p></div>
-                <div class="page-actions"><button class="btn btn-primary" id="btnInvite">+ Convidar Membro</button></div>
+                ${isAdmin() ? '<div class="page-actions"><button class="btn btn-primary" id="btnInvite">+ Convidar por E-mail</button></div>' : ''}
             </div>
-            <div id="teamContainer" style="margin-top:16px">
-                ${showLoading()}
-            </div>`;
-        $('btnInvite').addEventListener('click', openInviteMemberModal);
+            <div id="teamContainer" style="margin-top:16px">${showLoading()}</div>`;
+        if (isAdmin() && $('btnInvite')) $('btnInvite').addEventListener('click', openInviteMemberModal);
         loadTeam();
     }
 
@@ -580,47 +617,124 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
         try {
             await ensureAuth();
             const members = await api('GET', `/orgs/${ORG_ID}/members`);
-            if (!members.length) { c.innerHTML = `<div class="empty-state-card"><h3>Nenhum membro</h3><p>Convide membros para sua organizacao</p><button class="btn btn-primary" onclick="document.getElementById('btnInvite').click()" style="margin-top:16px">+ Convidar Primeiro Membro</button></div>`; return; }
+            if (!members.length) {
+                c.innerHTML = `<div class="empty-state-card"><h3>Nenhum membro</h3><p>Convide membros para sua organizacao</p>
+                    ${isAdmin() ? '<button class="btn btn-primary" onclick="document.getElementById(\'btnInvite\').click()" style="margin-top:16px">+ Convidar Primeiro Membro</button>' : ''}</div>`;
+                return;
+            }
             c.innerHTML = `<div class="card"><div class="card-header"><span class="card-title">Membros da Organizacao</span><span class="card-badge">${members.length}</span></div>
                 <div class="team-grid">${members.map(m => {
                     const initials = m.initials || m.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+                    const isSelf = String(m.id) === String(currentUserId);
+                    const memberData = JSON.stringify({ id: m.id, name: m.name, email: m.email, role: m.role, color: m.color || '#818cf8' });
                     return `<div class="team-card">
                         <div class="team-card-avatar" style="background:${m.color || '#818cf8'}">${initials}</div>
                         <div class="team-card-info">
-                            <div class="team-card-name">${esc(m.name)}</div>
+                            <div class="team-card-name">${esc(m.name)}${isSelf ? ' <span style="font-size:0.75rem;color:var(--text-tertiary)">(voce)</span>' : ''}</div>
                             <div class="team-card-email">${esc(m.email)}</div>
                         </div>
-                        <span class="badge ${m.role === 'admin' ? 'badge-approved' : 'badge-pending'}">${m.role === 'admin' ? '👑 Admin' : '👤 Membro'}</span>
-                        <button class="btn btn-secondary btn-sm" data-edit-member='${JSON.stringify({ id: m.id, name: m.name, email: m.email, role: m.role, color: m.color || '#818cf8' })}'>✏ Editar</button>
+                        <span class="badge ${m.role === 'admin' ? 'badge-approved' : 'badge-pending'}">${m.role === 'admin' ? 'Admin' : 'Membro'}</span>
+                        <div style="display:flex;gap:6px">
+                            ${isAdmin() ? `<button class="btn btn-secondary btn-sm" data-edit-member='${memberData}'>Editar</button>` : ''}
+                            ${isAdmin() && !isSelf ? `<button class="btn btn-sm" data-delete-member="${m.id}" data-delete-name="${esc(m.name)}" style="background:transparent;color:var(--danger);border:1px solid var(--danger);cursor:pointer">Remover</button>` : ''}
+                        </div>
                     </div>`;
                 }).join('')}</div></div>`;
 
             c.querySelectorAll('[data-edit-member]').forEach(btn => {
                 btn.addEventListener('click', () => openEditMemberModal(JSON.parse(btn.dataset.editMember)));
             });
+            c.querySelectorAll('[data-delete-member]').forEach(btn => {
+                btn.addEventListener('click', () => deleteMember(btn.dataset.deleteMember, btn.dataset.deleteName));
+            });
         } catch (e) { c.innerHTML = `<div class="empty-state-card"><h3>Erro</h3><p>${e.message || e.detail || 'Verifique a API'}</p></div>`; }
     }
 
+    async function deleteMember(userId, userName) {
+        const confirmed = confirm(`Tem certeza que deseja remover "${userName}" da organizacao?\n\nEle perdera acesso ao sistema.`);
+        if (!confirmed) return;
+        try {
+            await ensureAuth();
+            await api('DELETE', `/orgs/${ORG_ID}/members/${userId}`);
+            toast(`${userName} removido da organizacao`);
+            loadTeam();
+        } catch (e) {
+            toast(e.message || 'Erro ao remover membro', 'error');
+        }
+    }
+
     function openInviteMemberModal() {
-        openActionModal('Convidar Membro', `
+        openActionModal('Convidar Membro por E-mail', `
             <div class="form-card">
-                ${formRow('Nome Completo', '', '<input class="input" id="fName" placeholder="Joao Silva">')}
-                ${formRow('E-mail', '', '<input class="input" id="fEmail" type="email" placeholder="joao@empresa.com">')}
-                ${formRow('Cargo', '', '<select class="input" id="fRole"><option value="member">Membro</option><option value="admin">Admin</option></select>')}
-                <div class="form-actions"><button class="btn btn-secondary" onclick="document.getElementById('actionModalClose').click()">Cancelar</button><button class="btn btn-primary" id="fInviteSubmit">Convidar</button></div>
+                <div style="margin-bottom:16px;padding:12px 16px;background:var(--bg-tertiary);border-radius:8px;font-size:0.88rem;color:var(--text-secondary)">
+                    O membro recebera acesso com uma senha temporaria. Ele podera alterar depois nas configuracoes.
+                </div>
+                ${formRow('Nome Completo', 'Nome do novo membro', '<input class="input" id="fName" placeholder="Joao Silva">')}
+                ${formRow('E-mail', 'E-mail para acesso', '<input class="input" id="fEmail" type="email" placeholder="joao@empresa.com">')}
+                ${formRow('Cargo', 'Permissoes no sistema', `<select class="input" id="fRole">
+                    <option value="member">Membro — visualiza MRs e analises</option>
+                    <option value="admin">Admin — gerencia repos, equipe e regras</option>
+                </select>`)}
+                <div class="form-actions">
+                    <button class="btn btn-secondary" onclick="document.getElementById('actionModalClose').click()">Cancelar</button>
+                    <button class="btn btn-primary" id="fInviteSubmit">Enviar Convite</button>
+                </div>
                 <div id="fInviteResult"></div>
             </div>`);
         $('fInviteSubmit').addEventListener('click', async () => {
+            const name = $('fName').value.trim();
+            const email = $('fEmail').value.trim();
+            if (!name || !email) { $('fInviteResult').innerHTML = '<div class="form-error">Preencha nome e e-mail</div>'; return; }
+
             const btn = $('fInviteSubmit'); btn.disabled = true; btn.textContent = 'Convidando...';
             try {
                 await ensureAuth();
-                const m = await api('POST', `/orgs/${ORG_ID}/members/invite`, { name: $('fName').value, email: $('fEmail').value, role: $('fRole').value });
-                toast(`${m.name} adicionado!`); closeActionModal(); if (currentPage === 'team') loadTeam();
-            } catch (e) { $('fInviteResult').innerHTML = `<div class="form-error">✗ ${e.message || e.detail || JSON.stringify(e)}</div>`; btn.disabled = false; btn.textContent = 'Convidar'; }
+                const m = await api('POST', `/orgs/${ORG_ID}/members/invite`, { name, email, role: $('fRole').value });
+
+                // Show credentials for admin to copy/share
+                const loginUrl = window.location.origin + '/app/index.html';
+                const shareText = `Ola ${name}! Voce foi convidado para o Codexfy.\n\nAcesse: ${loginUrl}\nE-mail: ${email}\nSenha: ${m.temp_password}\n\nTroque sua senha apos o primeiro login.`;
+
+                actionBody.innerHTML = `
+                    <div style="text-align:center;padding:8px 0">
+                        <div style="font-size:2.5rem;margin-bottom:12px">✅</div>
+                        <h3 style="color:var(--text-primary);margin-bottom:4px">${esc(name)} adicionado!</h3>
+                        <p style="color:var(--text-tertiary);margin-bottom:20px">Envie as credenciais abaixo para o membro</p>
+
+                        <div style="background:var(--bg-tertiary);border-radius:10px;padding:20px;text-align:left;margin-bottom:16px;border:1px solid var(--border-color)">
+                            <div style="margin-bottom:10px"><span style="color:var(--text-tertiary);font-size:0.82rem">Link de acesso</span><div style="font-weight:600;color:var(--text-primary);word-break:break-all">${loginUrl}</div></div>
+                            <div style="margin-bottom:10px"><span style="color:var(--text-tertiary);font-size:0.82rem">E-mail</span><div style="font-weight:600;color:var(--text-primary)">${esc(email)}</div></div>
+                            <div><span style="color:var(--text-tertiary);font-size:0.82rem">Senha temporaria</span><div style="font-weight:700;font-size:1.2rem;color:var(--accent-primary);font-family:JetBrains Mono,monospace;letter-spacing:1px">${esc(m.temp_password)}</div></div>
+                        </div>
+
+                        <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+                            <button class="btn btn-primary" id="btnCopyCredentials" style="font-size:0.88rem">Copiar para WhatsApp</button>
+                            <button class="btn btn-secondary" id="btnCloseInvite" style="font-size:0.88rem">Fechar</button>
+                        </div>
+                    </div>`;
+
+                $('btnCopyCredentials').addEventListener('click', () => {
+                    navigator.clipboard.writeText(shareText).then(() => {
+                        $('btnCopyCredentials').textContent = 'Copiado!';
+                        toast('Credenciais copiadas! Cole no WhatsApp.');
+                        setTimeout(() => { $('btnCopyCredentials').textContent = 'Copiar para WhatsApp'; }, 2000);
+                    });
+                });
+                $('btnCloseInvite').addEventListener('click', () => {
+                    closeActionModal();
+                    if (currentPage === 'team') loadTeam();
+                });
+
+            } catch (e) {
+                const msg = e.message || e.detail || JSON.stringify(e);
+                $('fInviteResult').innerHTML = `<div class="form-error">${msg}</div>`;
+                btn.disabled = false; btn.textContent = 'Enviar Convite';
+            }
         });
     }
 
     function openEditMemberModal(member) {
+        const isSelf = String(member.id) === String(currentUserId);
         openActionModal('Editar Perfil — ' + member.name, `
             <div class="form-card">
                 <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border-color)">
@@ -629,9 +743,15 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
                 </div>
                 ${formRow('Nome', '', `<input class="input" id="eName" value="${esc(member.name)}">`)}
                 ${formRow('E-mail', '', `<input class="input" id="eEmail" value="${esc(member.email)}" disabled style="opacity:0.6">`)}
-                ${formRow('Cargo', '', `<select class="input" id="eRole"><option value="member" ${member.role === 'member' ? 'selected' : ''}>Membro</option><option value="admin" ${member.role === 'admin' ? 'selected' : ''}>Admin</option></select>`)}
+                ${formRow('Cargo', '', `<select class="input" id="eRole">
+                    <option value="member" ${member.role === 'member' ? 'selected' : ''}>Membro</option>
+                    <option value="admin" ${member.role === 'admin' ? 'selected' : ''}>Admin</option>
+                </select>`)}
                 ${formRow('Cor do Avatar', '', `<input type="color" id="eColor" value="${member.color}" style="width:48px;height:36px;border:none;background:none;cursor:pointer">`)}
-                <div class="form-actions"><button class="btn btn-secondary" onclick="document.getElementById('actionModalClose').click()">Cancelar</button><button class="btn btn-primary" id="eSubmit">Salvar</button></div>
+                <div class="form-actions">
+                    <button class="btn btn-secondary" onclick="document.getElementById('actionModalClose').click()">Cancelar</button>
+                    <button class="btn btn-primary" id="eSubmit">Salvar</button>
+                </div>
                 <div id="eResult"></div>
             </div>`);
         $('eSubmit').addEventListener('click', async () => {
@@ -646,8 +766,9 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
                 toast('Perfil atualizado!');
                 closeActionModal();
                 if (currentPage === 'team') loadTeam();
+                if (isSelf) loadMyRole();
             } catch (e) {
-                $('eResult').innerHTML = `<div class="form-error">✗ ${e.message || e.detail || JSON.stringify(e)}</div>`;
+                $('eResult').innerHTML = `<div class="form-error">${e.message || e.detail || JSON.stringify(e)}</div>`;
                 btn.disabled = false; btn.textContent = 'Salvar';
             }
         });
@@ -956,31 +1077,143 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
     // ================================================================
     //  RULES PAGE
     // ================================================================
+    let _rulesCache = [];
+
     async function renderRulesPage() {
-        pageContent.innerHTML = `<h1 class="page-title">Regras de Negocio</h1><p class="page-subtitle">Configure as regras que a IA verifica em cada merge request</p><div id="rulesPageContainer">${showLoading()}</div>`;
+        pageContent.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+                <div>
+                    <h1 class="page-title">Regras de Negocio</h1>
+                    <p class="page-subtitle">Configure as regras que a IA verifica em cada merge request</p>
+                </div>
+                ${isAdmin() ? '<button class="btn btn-primary" id="btnNewRule">+ Nova Regra</button>' : ''}
+            </div>
+            <div id="rulesPageContainer">${showLoading()}</div>`;
+
+        if ($('btnNewRule')) $('btnNewRule').addEventListener('click', () => openRuleForm());
 
         try {
             await ensureAuth();
-            const rules = await api('GET', `/orgs/${ORG_ID}/rules`);
-            renderRulesGrid(rules);
+            _rulesCache = await api('GET', `/orgs/${ORG_ID}/rules`);
+            renderRulesGrid(_rulesCache);
         } catch (_) {
             if (typeof CONFIGURABLE_RULES !== 'undefined') {
-                renderRulesGrid(CONFIGURABLE_RULES.map(r => ({
-                    id: r.id,
-                    name: r.name,
-                    description: r.desc,
-                    severity: r.severity,
-                    is_active: r.active,
-                    is_builtin: false,
-                })));
+                _rulesCache = CONFIGURABLE_RULES.map(r => ({
+                    id: r.id, name: r.name, description: r.desc,
+                    severity: r.severity, is_active: r.active, is_builtin: false,
+                }));
+                renderRulesGrid(_rulesCache);
             }
+        }
+    }
+
+    function openRuleForm(rule) {
+        const isEdit = !!rule;
+        const title = isEdit ? 'Editar Regra' : 'Nova Regra';
+        openActionModal(title, `
+            <div style="display:flex;flex-direction:column;gap:16px;padding:8px 0">
+                <div>
+                    <label style="font-weight:600;margin-bottom:4px;display:block">Nome</label>
+                    <input class="input" id="ruleFormName" value="${esc(rule ? rule.name : '')}" placeholder="Ex: Validar tratamento de erros async">
+                </div>
+                <div>
+                    <label style="font-weight:600;margin-bottom:4px;display:block">Descricao</label>
+                    <textarea class="input" id="ruleFormDesc" rows="3" style="resize:vertical" placeholder="Descreva o que a IA deve verificar...">${esc(rule ? (rule.description || '') : '')}</textarea>
+                </div>
+                <div>
+                    <label style="font-weight:600;margin-bottom:4px;display:block">Severidade</label>
+                    <select class="input" id="ruleFormSev" style="min-width:160px">
+                        <option value="info" ${rule && rule.severity === 'info' ? 'selected' : ''}>Info</option>
+                        <option value="warning" ${(!rule || rule.severity === 'warning') ? 'selected' : ''}>Warning</option>
+                        <option value="critical" ${rule && rule.severity === 'critical' ? 'selected' : ''}>Critical</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="font-weight:600;margin-bottom:4px;display:block">Dica para a IA (opcional)</label>
+                    <textarea class="input" id="ruleFormHint" rows="2" style="resize:vertical" placeholder="Ex: Verifique se todo bloco async/await tem try-catch...">${esc(rule && rule.prompt_hint ? rule.prompt_hint : '')}</textarea>
+                </div>
+                <div style="display:flex;gap:10px;margin-top:8px">
+                    <button class="btn btn-primary" id="ruleFormSave">${isEdit ? 'Salvar' : 'Criar Regra'}</button>
+                    <button class="btn" id="ruleFormCancel" style="background:var(--bg-tertiary);color:var(--text-primary)">Cancelar</button>
+                </div>
+            </div>
+        `);
+
+        $('ruleFormCancel').addEventListener('click', closeActionModal);
+        $('ruleFormSave').addEventListener('click', async () => {
+            const name = $('ruleFormName').value.trim();
+            const description = $('ruleFormDesc').value.trim();
+            const severity = $('ruleFormSev').value;
+            const prompt_hint = $('ruleFormHint').value.trim();
+
+            if (!name) { toast('Nome e obrigatorio', 'error'); return; }
+
+            const btn = $('ruleFormSave');
+            btn.disabled = true; btn.textContent = 'Salvando...';
+
+            try {
+                await ensureAuth();
+                if (isEdit) {
+                    await api('PATCH', `/orgs/${ORG_ID}/rules/${rule.id}`, { name, description, severity, prompt_hint });
+                    toast('Regra atualizada!');
+                } else {
+                    await api('POST', `/orgs/${ORG_ID}/rules`, { name, description, severity, is_active: true, prompt_hint });
+                    toast('Regra criada!');
+                }
+                closeActionModal();
+                renderRulesPage();
+            } catch (e) {
+                toast(e.message || 'Erro ao salvar regra', 'error');
+                btn.disabled = false; btn.textContent = isEdit ? 'Salvar' : 'Criar Regra';
+            }
+        });
+    }
+
+    async function deleteRule(ruleId, ruleName) {
+        const confirmed = confirm(`Tem certeza que deseja excluir a regra "${ruleName}"?\n\nEssa acao nao pode ser desfeita.`);
+        if (!confirmed) return;
+
+        try {
+            await ensureAuth();
+            await api('DELETE', `/orgs/${ORG_ID}/rules/${ruleId}`);
+            toast('Regra excluida!');
+            renderRulesPage();
+        } catch (e) {
+            toast(e.message || 'Erro ao excluir regra', 'error');
         }
     }
 
     function renderRulesGrid(rules) {
         const container = $('rulesPageContainer');
-        container.innerHTML = `<div class="rules-page-grid">${rules.map((r, i) => `<div class="rule-config-card stagger-in" style="animation-delay:${i*0.06}s"><div class="rule-config-header"><span class="rule-config-title">${esc(r.name)}</span><button class="rule-toggle ${r.is_active ? 'active' : ''}" data-rule-id="${r.id}"></button></div><div class="rule-config-desc">${esc(r.description || r.desc || '')}</div><div class="rule-config-severity"><span class="issue-severity ${r.severity}">${(r.severity || 'info').toUpperCase()}</span><span class="rule-status-label">${r.is_active ? 'Ativa' : 'Inativa'}</span></div></div>`).join('')}</div>`;
+        if (!rules.length) {
+            container.innerHTML = `
+                <div class="card" style="text-align:center;padding:40px">
+                    <p style="font-size:1.1rem;margin-bottom:12px">Nenhuma regra configurada ainda</p>
+                    <p style="color:var(--text-tertiary);margin-bottom:20px">Crie regras personalizadas para que a IA verifique em cada merge request</p>
+                    <button class="btn btn-primary" onclick="document.getElementById('btnNewRule').click()">+ Criar primeira regra</button>
+                </div>`;
+            return;
+        }
 
+        container.innerHTML = `<div class="rules-page-grid">${rules.map((r, i) => `
+            <div class="rule-config-card stagger-in" style="animation-delay:${i*0.06}s">
+                <div class="rule-config-header">
+                    <span class="rule-config-title">${esc(r.name)}</span>
+                    <button class="rule-toggle ${r.is_active ? 'active' : ''}" data-rule-id="${r.id}"></button>
+                </div>
+                <div class="rule-config-desc">${esc(r.description || r.desc || '')}</div>
+                <div class="rule-config-severity">
+                    <span class="issue-severity ${r.severity}">${(r.severity || 'info').toUpperCase()}</span>
+                    <span class="rule-status-label">${r.is_active ? 'Ativa' : 'Inativa'}</span>
+                </div>
+                ${r.is_builtin ? '<div style="margin-top:8px;font-size:0.75rem;color:var(--text-tertiary)">Regra do sistema</div>' : (isAdmin() ? `
+                <div style="margin-top:10px;display:flex;gap:8px">
+                    <button class="btn rule-edit-btn" data-rule-id="${r.id}" style="font-size:0.78rem;padding:4px 12px;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border-color);border-radius:6px;cursor:pointer">Editar</button>
+                    <button class="btn rule-delete-btn" data-rule-id="${r.id}" data-rule-name="${esc(r.name)}" style="font-size:0.78rem;padding:4px 12px;background:transparent;color:var(--danger);border:1px solid var(--danger);border-radius:6px;cursor:pointer">Excluir</button>
+                </div>` : '')}
+            </div>`).join('')}</div>`;
+
+        // Toggle ativar/desativar
         container.querySelectorAll('.rule-toggle').forEach(t => t.addEventListener('click', async () => {
             const ruleId = t.dataset.ruleId;
             const rule = rules.find(x => String(x.id) === String(ruleId));
@@ -1001,6 +1234,17 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
                 t.classList.toggle('active');
                 if (label) label.textContent = !newActive ? 'Ativa' : 'Inativa';
             }
+        }));
+
+        // Editar
+        container.querySelectorAll('.rule-edit-btn').forEach(b => b.addEventListener('click', () => {
+            const rule = rules.find(x => String(x.id) === String(b.dataset.ruleId));
+            if (rule) openRuleForm(rule);
+        }));
+
+        // Excluir
+        container.querySelectorAll('.rule-delete-btn').forEach(b => b.addEventListener('click', () => {
+            deleteRule(b.dataset.ruleId, b.dataset.ruleName);
         }));
     }
 

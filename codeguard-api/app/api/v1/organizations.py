@@ -140,13 +140,14 @@ async def list_members(
         await db.table("users")
         .select("*")
         .eq("org_id", str(org_id))
+        .eq("is_active", True)
         .order("created_at")
         .execute()
     )
     return resp.data or []
 
 
-@router.post("/{org_id}/members/invite", response_model=UserOut, status_code=201)
+@router.post("/{org_id}/members/invite", status_code=201)
 async def invite_member(
     org_id: UUID,
     body: UserInvite,
@@ -159,7 +160,7 @@ async def invite_member(
         raise ConflictError(f"User with email '{body.email}' already exists")
 
     initials = "".join(w[0].upper() for w in body.name.split()[:2])
-    temp_password = secrets.token_urlsafe(16)
+    temp_password = secrets.token_urlsafe(8)
 
     # Generate a default avatar color
     colors = ["#818cf8", "#f472b6", "#34d399", "#fbbf24", "#60a5fa", "#a78bfa", "#f87171"]
@@ -176,7 +177,24 @@ async def invite_member(
             "hashed_password": hash_password(temp_password),
         }
     ).execute()
-    return resp.data[0]  # type: ignore[index]
+
+    user = resp.data[0]  # type: ignore[index]
+
+    # Send invitation email
+    from app.services.email_service import send_invite_email
+    from app.config import get_settings
+    s = get_settings()
+    login_url = s.public_api_url.rstrip("/") + "/app/index.html"
+    email_sent = await send_invite_email(
+        to_email=body.email,
+        to_name=body.name,
+        temp_password=temp_password,
+        login_url=login_url,
+        role=body.role,
+    )
+
+    # Return user data + temporary password (shown once to admin)
+    return {**user, "temp_password": temp_password, "email_sent": email_sent}
 
 
 @router.patch("/{org_id}/members/{user_id}", response_model=UserOut)
@@ -215,3 +233,43 @@ async def update_member(
         .execute()
     )
     return resp.data[0]  # type: ignore[index]
+
+
+@router.delete("/{org_id}/members/{user_id}", status_code=204)
+async def delete_member(
+    org_id: UUID,
+    user_id: UUID,
+    _current_user: dict = Depends(require_admin),
+):
+    """Remove a member from the organization (admin only). Cannot delete yourself."""
+    if str(_current_user.get("id")) == str(user_id):
+        raise ConflictError("Voce nao pode remover a si mesmo")
+
+    db = await get_supabase()
+    existing = (
+        await db.table("users")
+        .select("id")
+        .eq("id", str(user_id))
+        .eq("org_id", str(org_id))
+        .execute()
+    )
+    if not existing.data:
+        raise NotFoundError("User", str(user_id))
+
+    await db.table("users").update({"is_active": False}).eq("id", str(user_id)).execute()
+
+
+@router.get("/{org_id}/me")
+async def get_my_profile(
+    org_id: UUID,
+    current_user: dict = Depends(get_current_user),
+):
+    """Return the current user's profile and role."""
+    return {
+        "id": current_user.get("id"),
+        "name": current_user.get("name", ""),
+        "email": current_user.get("email", ""),
+        "role": current_user.get("role", "member"),
+        "initials": current_user.get("initials", ""),
+        "color": current_user.get("color", "#818cf8"),
+    }

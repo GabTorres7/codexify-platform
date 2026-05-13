@@ -1,12 +1,14 @@
-"""Claude prompt templates for MR analysis."""
+"""Prompt templates para analise de MR com IA."""
 
 
-SYSTEM_PROMPT = """You are CodeGuard AI, an expert code reviewer specializing in security, performance, readability, and software engineering best practices.
+SYSTEM_PROMPT = """Voce e o Codexfy AI, um especialista em code review focado em seguranca, performance, legibilidade e boas praticas de engenharia de software.
 
-You analyze merge request diffs and return structured JSON — never plain text.
+Voce analisa diffs de merge requests e retorna JSON estruturado — nunca texto puro.
 
-Your JSON output MUST conform exactly to the schema described in each user message.
-Be thorough, precise, and actionable. When flagging issues, always suggest concrete fixes."""
+IMPORTANTE: Todas as suas respostas (titles, descriptions, suggestions, annotations) devem ser escritas em PORTUGUES BRASILEIRO. Termos tecnicos como SQL Injection, XSS, hardcoded, token, etc. podem permanecer em ingles.
+
+Seu JSON DEVE seguir exatamente o schema descrito em cada mensagem do usuario.
+Seja detalhado, preciso e pratico. Ao apontar problemas, sempre sugira correcoes concretas."""
 
 
 def build_analysis_prompt(
@@ -17,75 +19,75 @@ def build_analysis_prompt(
 ) -> str:
     rules_block = "\n".join(
         f"- [{r['severity'].upper()}] {r['name']}: {r.get('description', '')}. "
-        f"{'Hint: ' + r['prompt_hint'] if r.get('prompt_hint') else ''}"
+        f"{'Dica: ' + r['prompt_hint'] if r.get('prompt_hint') else ''}"
         for r in rules
     )
 
     diffs_block = ""
     for f in files_diff:
-        diffs_block += f"\n\n### File: {f['file']}\n```diff\n{f['diff_text']}\n```"
+        diffs_block += f"\n\n### Arquivo: {f['file']}\n```diff\n{f['diff_text']}\n```"
 
-    return f"""# Merge Request Analysis
+    return f"""# Analise de Merge Request
 
-## MR Title
+## Titulo do MR
 {mr_title}
 
-## MR Description
-{mr_description or 'No description provided.'}
+## Descricao do MR
+{mr_description or 'Sem descricao fornecida.'}
 
-## Rules to Enforce
+## Regras a Verificar
 {rules_block}
 
-## Code Changes (unified diff)
+## Alteracoes no Codigo (unified diff)
 {diffs_block}
 
 ---
 
-## Required Output Format
+## Formato de Saida Obrigatorio
 
-Respond ONLY with a valid JSON object matching this exact schema:
+Responda APENAS com um JSON valido seguindo exatamente este schema:
 
 ```json
 {{
-  "ai_score": <integer 0-100, overall quality>,
-  "score_security": <integer 0-100>,
-  "score_performance": <integer 0-100>,
-  "score_readability": <integer 0-100>,
-  "score_business_rules": <integer 0-100>,
+  "ai_score": <inteiro 0-100, qualidade geral>,
+  "score_security": <inteiro 0-100>,
+  "score_performance": <inteiro 0-100>,
+  "score_readability": <inteiro 0-100>,
+  "score_business_rules": <inteiro 0-100>,
   "issues": [
     {{
       "severity": "critical|warning|info|suggestion",
-      "title": "<short title>",
-      "description": "<detailed explanation>",
-      "file_path": "<file path or null>",
-      "line_ref": "<line number or range, e.g. '23' or '20-29', or null>",
-      "suggestion": "<concrete fix suggestion>"
+      "title": "<titulo curto em portugues>",
+      "description": "<explicacao detalhada em portugues>",
+      "file_path": "<caminho do arquivo ou null>",
+      "line_ref": "<numero da linha ou intervalo, ex: '23' ou '20-29', ou null>",
+      "suggestion": "<sugestao concreta de correcao em portugues>"
     }}
   ],
   "diff_annotations": [
     {{
-      "file_path": "<file path>",
-      "after_line": <integer line number>,
+      "file_path": "<caminho do arquivo>",
+      "after_line": <numero inteiro da linha>,
       "type": "danger|warning|info",
-      "text": "<brief annotation shown inline in the diff>"
+      "text": "<anotacao breve em portugues exibida inline no diff>"
     }}
   ],
   "rule_results": [
     {{
-      "rule_name": "<exact rule name from the list above>",
+      "rule_name": "<nome exato da regra da lista acima>",
       "status": "pass|fail|warn",
-      "description": "<explanation of why it passed or failed>"
+      "description": "<explicacao em portugues de por que passou ou falhou>"
     }}
   ]
 }}
 ```
 
-Score rubric:
-- 90-100: Excellent — production ready
-- 75-89: Good — minor issues
-- 60-74: Regular — needs attention
-- 0-59: Critical — must fix before merge
+Criterios de pontuacao:
+- 90-100: Excelente — pronto para producao
+- 75-89: Bom — problemas menores
+- 60-74: Regular — precisa de atencao
+- 0-59: Critico — deve corrigir antes do merge
 
-The overall ai_score should be the weighted average: security×0.35 + performance×0.20 + readability×0.20 + business_rules×0.25.
+O ai_score deve ser a media ponderada: seguranca×0.35 + performance×0.20 + legibilidade×0.20 + regras_negocio×0.25.
 
-Return ONLY the JSON object, no markdown fences, no extra text."""
+Responda APENAS com o JSON, sem markdown fences, sem texto extra."""

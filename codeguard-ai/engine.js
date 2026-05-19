@@ -28,9 +28,8 @@ const AnalysisEngine = {
      * Get score grade label
      */
     getScoreGrade(score) {
-        if (score >= 90) return { label: 'Excelente', class: 'high', color: '#34d399', description: 'O código atende a todos os padrões de qualidade. Aprovado para merge.' };
-        if (score >= 75) return { label: 'Bom', class: 'medium', color: '#fbbf24', description: 'O código é aceitável com pequenos pontos de melhoria. Considerar as sugestões da IA.' };
-        if (score >= 60) return { label: 'Regular', class: 'medium', color: '#fb923c', description: 'O código possui issues que devem ser resolvidas antes do merge. Revisão necessária.' };
+        if (score >= 65) return { label: 'Excelente', class: 'high', color: '#34d399', description: 'O código atende aos padrões de qualidade. Aprovado para merge.' };
+        if (score >= 50) return { label: 'Regular', class: 'medium', color: '#fbbf24', description: 'O código possui pontos de melhoria. Considerar as sugestões da IA.' };
         return { label: 'Crítico', class: 'low', color: '#f87171', description: 'O código possui problemas críticos que impedem o merge. Correções obrigatórias.' };
     },
 
@@ -39,11 +38,11 @@ const AnalysisEngine = {
      */
     getStatusInfo(status) {
         const map = {
-            approved: { label: 'Aprovado', class: 'badge-approved', icon: '✓' },
-            pending: { label: 'Pendente', class: 'badge-pending', icon: '⏳' },
-            issues: { label: 'Issues', class: 'badge-issues', icon: '!' },
-            analyzing: { label: 'Analisando', class: 'badge-analyzing', icon: '⚙' },
-            merged: { label: 'Merged', class: 'badge-merged', icon: '⎇' },
+            approved: { label: 'Aprovado', class: 'badge-approved', icon: '<i data-lucide="check-circle" style="width:14px;height:14px;display:inline-block;vertical-align:middle"></i>' },
+            pending: { label: 'Pendente', class: 'badge-pending', icon: '<i data-lucide="clock" style="width:14px;height:14px;display:inline-block;vertical-align:middle"></i>' },
+            issues: { label: 'Issues', class: 'badge-issues', icon: '<i data-lucide="alert-triangle" style="width:14px;height:14px;display:inline-block;vertical-align:middle"></i>' },
+            analyzing: { label: 'Analisando', class: 'badge-analyzing', icon: '<i data-lucide="loader" style="width:14px;height:14px;display:inline-block;vertical-align:middle" class="icon-spin"></i>' },
+            merged: { label: 'Merged', class: 'badge-merged', icon: '<i data-lucide="git-merge" style="width:14px;height:14px;display:inline-block;vertical-align:middle"></i>' },
         };
         return map[status] || map.pending;
     },
@@ -99,7 +98,7 @@ const AnalysisEngine = {
             security: '🔒 Segurança',
             performance: '⚡ Performance',
             readability: '📖 Legibilidade',
-            businessRules: '📋 Regras de Negócio',
+            businessRules: 'Regras de Negócio',
         };
         return map[key] || key;
     },

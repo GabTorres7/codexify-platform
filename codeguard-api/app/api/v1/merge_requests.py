@@ -117,9 +117,21 @@ async def get_merge_request(
                 {"after_line": ann["after_line"], "type": ann["type"], "text": ann["text"]}
             )
 
-        # Build diff list (files + their annotations)
+        # Get raw diff text from analysis response if available
+        raw_response = analysis.get("raw_claude_response") or {}
+        raw_files = {}
+        if isinstance(raw_response, dict):
+            for fd in raw_response.get("_files_diff", []):
+                raw_files[fd.get("file", "")] = fd.get("diff_text", "")
+
+        # Build diff list (files + their annotations + code)
         for file_path, anns in annotations_by_file.items():
-            diff.append({"file": file_path, "lines": [], "annotations": anns})
+            diff.append({
+                "file": file_path,
+                "lines": [],
+                "diff_text": raw_files.get(file_path, ""),
+                "annotations": anns,
+            })
 
         rules = [
             {

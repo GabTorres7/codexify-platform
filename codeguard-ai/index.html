@@ -4,12 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Codexfy — Plataforma inteligente de Code Review com IA. Analise merge requests automaticamente.">
-    <title>Codexfy — Code Review com IA</title>
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop stop-color='%237c3aed'/%3E%3Cstop offset='1' stop-color='%2306b6d4'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='%230f172a'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='monospace' font-weight='900' font-size='16' fill='url(%23g)'%3ECx%3C/text%3E%3C/svg%3E">
+    <title>Codexify — Code Review com IA</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=7">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&family=Archivo+Black&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css?v=8">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
 </head>
 <body>
     <!-- ============ LOGIN / REGISTER SCREEN ============ -->
@@ -22,19 +25,8 @@
         <div class="auth-container">
             <div class="auth-card">
                 <div class="auth-logo">
-                    <div class="auth-logo-icon">
-                        <svg width="44" height="44" viewBox="0 0 44 44" fill="none">
-                            <rect x="2" y="2" width="40" height="40" rx="12" stroke="url(#authLogoG)" stroke-width="2.5" fill="rgba(124,58,237,0.08)"/>
-                            <text x="22" y="28" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-weight="900" font-size="18" fill="url(#authLogoG)">Cx</text>
-                            <defs>
-                                <linearGradient id="authLogoG" x1="0" y1="0" x2="44" y2="44">
-                                    <stop stop-color="#7c3aed"/><stop offset="1" stop-color="#06b6d4"/>
-                                </linearGradient>
-                            </defs>
-                        </svg>
-                    </div>
-                    <h1 class="auth-title">Codex<span>fy</span></h1>
-                    <p class="auth-subtitle">Code Review inteligente com IA</p>
+                    <img src="logo.png?v=2" alt="Codexify" class="auth-logo-img">
+                    <p class="auth-subtitle" style="margin-top:10px;font-size:0.85rem;letter-spacing:3px;text-transform:uppercase;opacity:0.5">Code Review inteligente com IA</p>
                 </div>
 
                 <!-- Login Form -->
@@ -77,7 +69,7 @@
                     <p class="auth-switch">Já tem conta? <a href="#" id="showLogin">Fazer login</a></p>
                 </form>
             </div>
-            <p class="auth-footer-text">© 2026 Codexfy · Powered by AI</p>
+            <p class="auth-footer-text">© 2026 Codexify · Powered by AI</p>
         </div>
     </div>
 
@@ -87,21 +79,8 @@
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <div class="logo">
-                    <div class="logo-icon">
-                        <svg width="28" height="28" viewBox="0 0 44 44" fill="none">
-                            <rect x="2" y="2" width="40" height="40" rx="12" stroke="url(#sideLogoG)" stroke-width="2" fill="rgba(124,58,237,0.08)"/>
-                            <text x="22" y="28" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-weight="900" font-size="18" fill="url(#sideLogoG)">Cx</text>
-                            <defs>
-                                <linearGradient id="sideLogoG" x1="0" y1="0" x2="44" y2="44">
-                                    <stop stop-color="#7c3aed"/><stop offset="1" stop-color="#06b6d4"/>
-                                </linearGradient>
-                            </defs>
-                        </svg>
-                    </div>
-                    <div class="logo-text">
-                        <span class="logo-name">Codexfy</span>
-                        <span class="logo-badge">AI</span>
-                    </div>
+                    <img src="logo.png?v=2" alt="Codexify" class="sidebar-logo-img">
+                    <span class="logo-badge">AI</span>
                 </div>
             </div>
             <nav class="sidebar-nav">
@@ -244,7 +223,7 @@
                 <button class="modal-tab" data-tab="analysis">Análise IA</button>
                 <button class="modal-tab" data-tab="diff">Diff</button>
                 <button class="modal-tab" data-tab="rules">Regras</button>
-                <button class="modal-tab" data-tab="chat">💬 Chat</button>
+                <button class="modal-tab" data-tab="chat"><i data-lucide="message-circle" style="width:14px;height:14px;display:inline-block;vertical-align:middle"></i> Chat</button>
             </div>
             <div class="modal-body" id="modalBody"></div>
         </div>
@@ -286,8 +265,9 @@
     </div>
 
     <script src="data.js?v=7"></script>
-    <script src="engine.js?v=7"></script>
+    <script src="engine.js?v=9"></script>
     <script src="codexfy.js?v=7"></script>
-    <script src="app.js?v=7"></script>
+    <script src="app.js?v=8"></script>
+    <script>document.addEventListener('DOMContentLoaded', () => { if (window.lucide) lucide.createIcons(); });</script>
 </body>
 </html>

@@ -75,11 +75,21 @@ def _parse_uploaded_file(filename: str, data: bytes) -> str:
     if ext == "zip":
         return _extract_diff_from_zip(data)
 
-    # .patch / .diff / .txt — treat as raw diff
     try:
-        return data.decode("utf-8", errors="replace")
+        content = data.decode("utf-8", errors="replace")
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Não foi possível ler o arquivo: {exc}") from exc
+
+    # If already a diff/patch, return as-is
+    if ext in ("patch", "diff") or content.strip().startswith("diff --git"):
+        return content
+
+    # Convert source code to unified diff format (new file)
+    if len(content) > 8000:
+        content = content[:8000] + "\n... [truncado para análise]"
+    lines = content.splitlines()
+    diff_lines = [f"+{line}" for line in lines]
+    return f"diff --git a/{filename} b/{filename}\n--- /dev/null\n+++ b/{filename}\n@@ -0,0 +1,{len(lines)} @@\n" + "\n".join(diff_lines)
 
 
 # ── endpoint ─────────────────────────────────────────────────────────────────
@@ -156,9 +166,10 @@ async def upload_quick_analysis(
         upload_repo_id = repo_resp.data[0]["id"]  # type: ignore[index]
 
     import hashlib
-    upload_id = hashlib.md5(raw_diff[:200].encode()).hexdigest()[:12]
+    import time
+    upload_id = hashlib.md5((raw_diff[:200] + str(time.time())).encode()).hexdigest()[:12]
 
-    mr_resp = await db.table("merge_requests").insert({
+    mr_payload = {
         "repo_id": upload_repo_id,
         "platform_id": f"upload-{upload_id}",
         "title": mr_title.strip(),
@@ -173,7 +184,8 @@ async def upload_quick_analysis(
         "deletions": raw_diff.count("\n-"),
         "comments": 0,
         "status": "pending",
-    }).execute()
+    }
+    mr_resp = await db.table("merge_requests").insert(mr_payload).execute()
 
     mr_id = UUID(mr_resp.data[0]["id"])  # type: ignore[index]
 

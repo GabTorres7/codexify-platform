@@ -1,5 +1,5 @@
 /* ================================================
-   Codexfy AI - Main Application
+   Codexify AI - Main Application
    ================================================ */
 
 (function () {
@@ -230,6 +230,16 @@
 
     function esc(text) { const d = document.createElement('div'); d.textContent = text; return d.innerHTML; }
 
+    // Lucide icon helper
+    function icon(name, size) {
+        const s = size || 18;
+        return `<i data-lucide="${name}" style="width:${s}px;height:${s}px;display:inline-block;vertical-align:middle"></i>`;
+    }
+    function refreshIcons() { if (window.lucide) setTimeout(() => lucide.createIcons(), 50); }
+
+    // Auto-refresh Lucide icons when DOM changes
+    new MutationObserver(() => refreshIcons()).observe(document.body, { childList: true, subtree: true });
+
     function formRow(label, desc, inputHtml) {
         return `<div class="form-row"><div class="form-row-info"><h4>${label}</h4>${desc ? '<p>' + desc + '</p>' : ''}</div><div class="form-row-input">${inputHtml}</div></div>`;
     }
@@ -258,6 +268,7 @@
         pageContent.offsetHeight;
         pageContent.style.animation = 'fadeIn 0.3s ease';
         (r[currentPage] || r.dashboard)();
+        refreshIcons();
     }
 
     // ================================================================
@@ -266,34 +277,34 @@
     async function renderDashboard(q) {
         pageContent.innerHTML = `
             <h1 class="page-title">Dashboard</h1>
-            <p class="page-subtitle">Visão geral das análises de merge requests — Codexfy AI</p>
-            <div style="display:flex;gap:10px;margin-bottom:20px"><button class="export-btn" id="exportCsvBtn">📊 Exportar CSV</button></div>
+            <p class="page-subtitle">Visão geral das análises de merge requests — Codexify AI</p>
+            <div style="display:flex;gap:10px;margin-bottom:20px"><button class="export-btn" id="exportCsvBtn">${icon('download')} Exportar CSV</button></div>
             <div class="metrics-grid" id="metricsGrid">
-                ${metricCard('purple', '📋', '...', 'MRs Pendentes', '', 0)}
-                ${metricCard('green', '✓', '...', 'Aprovados / Merged', '', 0.1)}
-                ${metricCard('red', '⚠', '...', 'Com Problemas', '', 0.2)}
-                ${metricCard('yellow', '⭐', '...', 'Score Medio IA', '', 0.3)}
+                ${metricCard('purple', icon('clock', 20), '...', 'MRs Pendentes', '', 0)}
+                ${metricCard('green', icon('check-circle', 20), '...', 'Aprovados / Merged', '', 0.1)}
+                ${metricCard('red', icon('alert-triangle', 20), '...', 'Com Problemas', '', 0.2)}
+                ${metricCard('yellow', icon('star', 20), '...', 'Score Médio IA', '', 0.3)}
             </div>
 
             <!-- Quick Actions -->
             <div class="quick-actions stagger-in" style="animation-delay:0.32s">
                 <button class="quick-action-btn" id="qaBtnAddRepo">
-                    <div class="qa-icon">📦</div>
-                    <div><strong>Adicionar Repositorio</strong><span>Conectar GitHub ou GitLab</span></div>
+                    <div class="qa-icon icon-bounce">${icon('folder-git-2', 24)}</div>
+                    <div><strong>Adicionar Repositório</strong><span>Conectar GitHub ou GitLab</span></div>
                 </button>
                 <button class="quick-action-btn" id="qaBtnInvite">
-                    <div class="qa-icon">👤</div>
-                    <div><strong>Convidar Membro</strong><span>Adicionar alguem a equipe</span></div>
+                    <div class="qa-icon icon-bounce">${icon('user-plus', 24)}</div>
+                    <div><strong>Convidar Membro</strong><span>Adicionar alguém à equipe</span></div>
                 </button>
                 <button class="quick-action-btn" id="qaBtnBulk">
-                    <div class="qa-icon">🚀</div>
+                    <div class="qa-icon icon-bounce">${icon('upload', 24)}</div>
                     <div><strong>Importar em Massa</strong><span>Vários repos de uma vez</span></div>
                 </button>
             </div>
 
             <div class="dashboard-grid">
                 <div class="card stagger-in" style="animation-delay:0.35s">
-                    <div class="card-header"><span class="card-title">Atividade Semanal</span><span class="card-badge">Ultimos 7 dias</span></div>
+                    <div class="card-header"><span class="card-title">Atividade Semanal</span><span class="card-badge">Últimos 7 dias</span></div>
                     <div class="card-body"><div class="chart-container" id="chartContainer">Carregando...</div></div>
                 </div>
                 <div class="card stagger-in" style="animation-delay:0.45s">
@@ -322,20 +333,20 @@
         try {
             const metrics = await api('GET', `/orgs/${ORG_ID}/dashboard/metrics`);
             $('metricsGrid').innerHTML = `
-                ${metricCard('purple', '📋', metrics.pending + (metrics.analyzing || 0), 'MRs Pendentes', '', 0)}
-                ${metricCard('green', '✓', metrics.approved + (metrics.merged || 0), 'Aprovados / Merged', '', 0.1)}
-                ${metricCard('red', '⚠', metrics.issues, 'Com Problemas', '', 0.2)}
-                ${metricCard('yellow', '⭐', metrics.avg_score + '<span style="font-size:1rem;color:var(--text-tertiary)">/100</span>', 'Score Medio IA', '', 0.3)}
+                ${metricCard('purple', icon('clock', 20), metrics.pending + (metrics.analyzing || 0), 'MRs Pendentes', '', 0)}
+                ${metricCard('green', icon('check-circle', 20), metrics.approved + (metrics.merged || 0), 'Aprovados / Merged', '', 0.1)}
+                ${metricCard('red', icon('alert-triangle', 20), metrics.issues, 'Com Problemas', '', 0.2)}
+                ${metricCard('yellow', icon('star', 20), metrics.avg_score + '<span style="font-size:1rem;color:var(--text-tertiary)">/100</span>', 'Score Médio IA', '', 0.3)}
             `;
         } catch (_) {
             // Fallback to mock
             if (typeof MERGE_REQUESTS !== 'undefined') {
                 const metrics = AnalysisEngine.getMetrics(MERGE_REQUESTS);
                 $('metricsGrid').innerHTML = `
-                    ${metricCard('purple', '📋', metrics.pending, 'MRs Pendentes', '', 0)}
-                    ${metricCard('green', '✓', metrics.approved, 'Aprovados / Merged', '', 0.1)}
-                    ${metricCard('red', '⚠', metrics.withIssues, 'Com Problemas', '', 0.2)}
-                    ${metricCard('yellow', '⭐', metrics.avgScore + '<span style="font-size:1rem;color:var(--text-tertiary)">/100</span>', 'Score Medio IA', '', 0.3)}
+                    ${metricCard('purple', icon('clock', 20), metrics.pending, 'MRs Pendentes', '', 0)}
+                    ${metricCard('green', icon('check-circle', 20), metrics.approved, 'Aprovados / Merged', '', 0.1)}
+                    ${metricCard('red', icon('alert-triangle', 20), metrics.withIssues, 'Com Problemas', '', 0.2)}
+                    ${metricCard('yellow', icon('star', 20), metrics.avgScore + '<span style="font-size:1rem;color:var(--text-tertiary)">/100</span>', 'Score Médio IA', '', 0.3)}
                 `;
             }
         }
@@ -400,8 +411,8 @@
     // ================================================================
     const EXAMPLE_REPOS = [
         { platform: 'github', full_name: 'facebook/react', desc: 'Biblioteca UI do Facebook — PRs frequentes com alto volume', lang: 'JavaScript', stars: '230k' },
-        { platform: 'github', full_name: 'tiangolo/fastapi', desc: 'Framework web Python — PRs com boa qualidade de codigo', lang: 'Python', stars: '80k' },
-        { platform: 'github', full_name: 'microsoft/vscode', desc: 'Editor de codigo da Microsoft — PRs complexos e variados', lang: 'TypeScript', stars: '168k' },
+        { platform: 'github', full_name: 'tiangolo/fastapi', desc: 'Framework web Python — PRs com boa qualidade de código', lang: 'Python', stars: '80k' },
+        { platform: 'github', full_name: 'microsoft/vscode', desc: 'Editor de código da Microsoft — PRs complexos e variados', lang: 'TypeScript', stars: '168k' },
         { platform: 'github', full_name: 'pallets/flask', desc: 'Micro-framework Python — PRs menores, bom para testar', lang: 'Python', stars: '68k' },
         { platform: 'github', full_name: 'expressjs/express', desc: 'Framework Node.js minimalista — PRs concisos', lang: 'JavaScript', stars: '66k' },
         { platform: 'github', full_name: 'django/django', desc: 'Framework web Python completo — PRs com regras de negocio', lang: 'Python', stars: '82k' },
@@ -411,8 +422,8 @@
         return EXAMPLE_REPOS.map(r => `
             <div class="example-repo-card">
                 <div class="example-repo-top">
-                    <div class="repo-platform-badge github">⬡ GitHub</div>
-                    <span style="font-size:0.78rem;color:var(--text-tertiary)">⭐ ${r.stars}</span>
+                    <div class="repo-platform-badge github"><i data-lucide="github" style="width:14px;height:14px;display:inline-block;vertical-align:middle"></i> GitHub</div>
+                    <span style="font-size:0.78rem;color:var(--text-tertiary)">${icon('star', 14)} ${r.stars}</span>
                 </div>
                 <div class="example-repo-name">${esc(r.full_name)}</div>
                 <div class="example-repo-desc">${esc(r.desc)}</div>
@@ -432,10 +443,10 @@
                 openActionModal('Adicionar ' + fullName, `
                     <div class="form-card">
                         <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border-color)">
-                            <div style="font-size:2rem">⬡</div>
+                            <div style="font-size:2rem">${icon('github', 28)}</div>
                             <div>
                                 <div style="font-weight:700;font-size:1.1rem;color:var(--text-primary)">${esc(fullName)}</div>
-                                <div style="color:var(--text-tertiary);font-size:0.85rem">Repositorio publico — ${platform}</div>
+                                <div style="color:var(--text-tertiary);font-size:0.85rem">Repositório publico — ${platform}</div>
                             </div>
                         </div>
                         <p style="color:var(--text-secondary);font-size:0.88rem;margin-bottom:16px">
@@ -469,31 +480,31 @@
     function renderReposPage() {
         pageContent.innerHTML = `
             <div class="page-header-row">
-                <div><h1 class="page-title">Repositorios</h1><p class="page-subtitle">Gerencie os repositorios monitorados pela IA</p></div>
+                <div><h1 class="page-title">Repositórios</h1><p class="page-subtitle">Gerencie os repositórios monitorados pela IA</p></div>
                 ${isAdmin() ? `<div class="page-actions">
                     <button class="btn btn-secondary" id="btnBulkAdd">Importar em Massa</button>
-                    <button class="btn btn-primary" id="btnAddRepo">+ Adicionar Repositorio</button>
+                    <button class="btn btn-primary" id="btnAddRepo">+ Adicionar Repositório</button>
                 </div>` : ''}
             </div>
 
             <!-- How to add -->
             <div class="info-banner stagger-in" style="animation-delay:0.1s">
-                <div class="info-icon">💡</div>
+                <div class="info-icon">${icon('lightbulb', 20)}</div>
                 <div>
-                    <strong>Como adicionar repositorios?</strong>
-                    <p>Clique em <em>"+ Adicionar Repositorio"</em> para adicionar um por um, ou <em>"Importar em Massa"</em> para enviar varios de uma vez (ideal para empresas). Voce precisa do <strong>access token</strong> da plataforma (GitHub ou GitLab).</p>
+                    <strong>Como adicionar repositórios?</strong>
+                    <p>Clique em <em>"+ Adicionar Repositório"</em> para adicionar um por um, ou <em>"Importar em Massa"</em> para enviar varios de uma vez (ideal para empresas). Voce precisa do <strong>access token</strong> da plataforma (GitHub ou GitLab).</p>
                 </div>
             </div>
 
             <!-- Example repos for testing -->
             <div class="card stagger-in" style="animation-delay:0.2s;margin-top:16px">
                 <div class="card-header">
-                    <span class="card-title">🧪 Repositorios de Exemplo</span>
+                    <span class="card-title">${icon('flask-conical')} Repositórios de Exemplo</span>
                     <span class="card-badge">Teste rapido</span>
                 </div>
                 <div class="card-body" style="padding:16px">
                     <p style="color:var(--text-secondary);font-size:0.88rem;margin-bottom:16px">
-                        Quer testar a analise de MR sem configurar um repo? Use um desses repositorios publicos populares. Basta criar um <strong>Personal Access Token</strong> no GitHub (<a href="https://github.com/settings/tokens/new" target="_blank" style="color:var(--accent-primary)">criar token</a>) com permissao <code>public_repo</code> e colar abaixo.
+                        Quer testar a análise de MR sem configurar um repo? Use um desses repositórios publicos populares. Basta criar um <strong>Personal Access Token</strong> no GitHub (<a href="https://github.com/settings/tokens/new" target="_blank" style="color:var(--accent-primary)">criar token</a>) com permissão <code>public_repo</code> e colar abaixo.
                     </p>
                     <div class="example-repos-grid" id="exampleReposGrid">
                         ${renderExampleRepos()}
@@ -517,23 +528,23 @@
             await ensureAuth();
             const repos = await api('GET', `/orgs/${ORG_ID}/repos`);
             if (!repos.length) {
-                c.innerHTML = `<div class="empty-state-card"><svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg><h3>Nenhum repositorio cadastrado</h3><p>Comece adicionando seus repositorios GitHub ou GitLab</p><button class="btn btn-primary" onclick="document.getElementById('btnAddRepo').click()" style="margin-top:16px">+ Adicionar Primeiro Repositorio</button></div>`;
+                c.innerHTML = `<div class="empty-state-card"><svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg><h3>Nenhum repositório cadastrado</h3><p>Comece adicionando seus repositórios GitHub ou GitLab</p><button class="btn btn-primary" onclick="document.getElementById('btnAddRepo').click()" style="margin-top:16px">+ Adicionar Primeiro Repositório</button></div>`;
                 return;
             }
-            c.innerHTML = `<div class="card"><div class="card-header"><span class="card-title">Repositorios Cadastrados</span><span class="card-badge">${repos.length}</span></div>
+            c.innerHTML = `<div class="card"><div class="card-header"><span class="card-title">Repositórios Cadastrados</span><span class="card-badge">${repos.length}</span></div>
                 <div class="repos-grid">${repos.map(r => `
                     <div class="repo-card">
                         <div class="repo-card-top">
-                            <div class="repo-platform-badge ${r.platform}">${r.platform === 'github' ? '⬡ GitHub' : '🦊 GitLab'}</div>
+                            <div class="repo-platform-badge ${r.platform}">${r.platform === 'github' ? icon("github") + ' GitHub' : icon("gitlab") + ' GitLab'}</div>
                             ${isAdmin() ? `<div class="repo-actions">
-                                <button class="btn-icon" title="Sincronizar" data-sync="${r.id}">🔄</button>
-                                <button class="btn-icon btn-danger" title="Remover" data-del="${r.id}">🗑</button>
+                                <button class="btn-icon" title="Sincronizar" data-sync="${r.id}"><i data-lucide="refresh-cw" style="width:16px;height:16px"></i>button>
+                                <button class="btn-icon btn-danger" title="Remover" data-del="${r.id}"><i data-lucide="trash-2" style="width:16px;height:16px"></i>button>
                             </div>` : ''}
                         </div>
                         <div class="repo-card-name">${esc(r.full_name)}</div>
                         <div class="repo-card-branch">Branch: ${r.default_branch}</div>
                         <div class="repo-card-footer">
-                            <span style="color:${r.auto_analyze ? 'var(--accent-success)' : 'var(--text-tertiary)'}">${r.auto_analyze ? '● Auto-Analise' : '○ Manual'}</span>
+                            <span style="color:${r.auto_analyze ? 'var(--accent-success)' : 'var(--text-tertiary)'}">${r.auto_analyze ? icon('check-circle', 14) + ' Auto-Análise' : icon('circle', 14) + ' Manual'}</span>
                             <span>Score min: ${r.min_score}</span>
                         </div>
                     </div>
@@ -543,18 +554,18 @@
                 b.disabled = true; try { await api('POST', `/orgs/${ORG_ID}/repos/${b.dataset.sync}/sync`); toast('Sync iniciada!'); } catch (e) { toast(e.message || 'Erro', 'error'); } b.disabled = false;
             }));
             c.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', async () => {
-                if (!confirm('Remover este repositorio e todos os seus dados?')) return;
+                if (!confirm('Remover este repositório e todos os seus dados?')) return;
                 try { await api('DELETE', `/orgs/${ORG_ID}/repos/${b.dataset.del}`); toast('Removido!'); loadRepos(); } catch (e) { toast(e.message || 'Erro', 'error'); }
             }));
         } catch (e) { c.innerHTML = `<div class="empty-state-card"><h3>Erro ao carregar</h3><p>${e.message || e.detail || 'Verifique a API'}</p></div>`; }
     }
 
     function openAddRepoModal() {
-        openActionModal('Adicionar Repositorio', `
+        openActionModal('Adicionar Repositório', `
             <div class="form-card">
-                ${formRow('Plataforma', '', '<select class="input" id="fPlatform"><option value="github">⬡ GitHub</option><option value="gitlab">🦊 GitLab</option></select>')}
-                ${formRow('Repositorio', 'Formato: owner/repo', '<input class="input" id="fFullName" placeholder="empresa/backend-api">')}
-                ${formRow('Access Token', 'Token com permissao de leitura', '<input class="input" id="fToken" type="password" placeholder="ghp_... ou glpat-...">')}
+                ${formRow('Plataforma', '', '<select class="input" id="fPlatform"><option value="github"><i data-lucide="github" style="width:14px;height:14px;display:inline-block;vertical-align:middle"></i> GitHub</option><option value="gitlab"><i data-lucide="gitlab" style="width:14px;height:14px;display:inline-block;vertical-align:middle"></i> GitLab</option></select>')}
+                ${formRow('Repositório', 'Formato: owner/repo', '<input class="input" id="fFullName" placeholder="empresa/backend-api">')}
+                ${formRow('Access Token', 'Token com permissão de leitura', '<input class="input" id="fToken" type="password" placeholder="ghp_... ou glpat-...">')}
                 ${formRow('Branch Principal', '', '<input class="input" id="fBranch" value="main">')}
                 <div class="form-actions">
                     <button class="btn btn-secondary" onclick="document.getElementById('actionModalClose').click()">Cancelar</button>
@@ -567,34 +578,254 @@
             try {
                 await ensureAuth();
                 await api('POST', `/orgs/${ORG_ID}/repos`, { platform: $('fPlatform').value, full_name: $('fFullName').value, access_token: $('fToken').value, default_branch: $('fBranch').value });
-                toast('Repositorio adicionado!'); closeActionModal(); if (currentPage === 'repositories') loadRepos();
+                toast('Repositório adicionado!'); closeActionModal(); if (currentPage === 'repositories') loadRepos();
             } catch (e) { $('fResult').innerHTML = `<div class="form-error">✗ ${e.message || e.detail || JSON.stringify(e)}</div>`; btn.disabled = false; btn.textContent = 'Adicionar'; }
         });
     }
 
     function openBulkAddModal() {
-        openActionModal('Importar Repositorios em Massa', `
+        openActionModal('Análise em Massa', `
             <div class="form-card">
-                <p style="color:var(--text-secondary);margin-bottom:12px">Cole a lista de repositorios, um por linha.<br>Formato: <code>plataforma,owner/repo,token</code></p>
-                <textarea id="fBulk" class="input" rows="8" style="width:100%;font-family:'JetBrains Mono',monospace;font-size:0.85rem;resize:vertical" placeholder="github,empresa/backend,ghp_abc123
-github,empresa/frontend,ghp_abc123
-gitlab,empresa/mobile,glpat-xyz789"></textarea>
-                <div class="form-actions"><button class="btn btn-secondary" onclick="document.getElementById('actionModalClose').click()">Cancelar</button><button class="btn btn-primary" id="fBulkSubmit">Importar Todos</button></div>
-                <div id="fBulkResult"></div>
+                <div id="bulkDropZone" style="border:2px dashed var(--border-color);border-radius:var(--radius-md);padding:36px;text-align:center;cursor:pointer;transition:all 0.2s;margin-bottom:16px">
+                    <div style="margin-bottom:10px">${icon('file-code', 40)}</div>
+                    <div style="font-weight:600;color:var(--text-primary);font-size:1.05rem">Arraste seus arquivos aqui</div>
+                    <div style="color:var(--text-tertiary);font-size:0.82rem;margin-top:6px">.py, .js, .ts, .java, .go, .zip, .patch — ou clique para selecionar</div>
+                    <input type="file" id="bulkFileInput" multiple accept=".py,.js,.ts,.tsx,.jsx,.java,.go,.rs,.rb,.php,.c,.cpp,.h,.cs,.swift,.kt,.patch,.diff,.txt,.zip,.json,.yaml,.yml,.html,.css,.sql,.sh" style="display:none">
+                </div>
+                <div id="bulkFileList"></div>
+                <div class="form-actions" style="margin-top:16px">
+                    <button class="btn btn-secondary" onclick="document.getElementById('actionModalClose').click()">Cancelar</button>
+                    <button class="btn btn-primary" id="fBulkSubmit" disabled>${icon('sparkles')} Analisar Todos</button>
+                </div>
             </div>`);
-        $('fBulkSubmit').addEventListener('click', async () => {
-            const btn = $('fBulkSubmit'); const text = $('fBulk').value.trim(); if (!text) return;
-            const repos = text.split('\n').filter(l => l.trim()).map(l => { const p = l.split(',').map(s => s.trim()); return { platform: p[0], full_name: p[1], access_token: p[2] || '' }; });
-            btn.disabled = true; btn.textContent = `Importando ${repos.length}...`;
+
+        let selectedFiles = [];
+        const dropZone = $('bulkDropZone'), fileInput = $('bulkFileInput');
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.borderColor = 'var(--accent-primary)'; dropZone.style.background = 'rgba(226,232,240,0.05)'; });
+        dropZone.addEventListener('dragleave', () => { dropZone.style.borderColor = 'var(--border-color)'; dropZone.style.background = ''; });
+        dropZone.addEventListener('drop', async e => { e.preventDefault(); dropZone.style.borderColor = 'var(--border-color)'; dropZone.style.background = ''; await addBulkFiles(Array.from(e.dataTransfer.files)); });
+        fileInput.addEventListener('change', async () => await addBulkFiles(Array.from(fileInput.files)));
+
+        async function addBulkFiles(files) {
+            const skipExts = ['png','jpg','jpeg','gif','svg','ico','woff','ttf','eot','mp3','mp4','pdf','exe','dll','zip'];
+
+            for (const f of files) {
+                if (f.size > 5 * 1024 * 1024) continue;
+
+                // If ZIP, extract individual files
+                if (f.name.endsWith('.zip') && window.JSZip) {
+                    try {
+                        const zip = await JSZip.loadAsync(f);
+                        const extracted = [];
+                        for (const [path, entry] of Object.entries(zip.files)) {
+                            if (entry.dir) continue;
+                            const ext = path.split('.').pop().toLowerCase();
+                            if (skipExts.includes(ext)) continue;
+                            const content = await entry.async('blob');
+                            const name = path.includes('/') ? path.split('/').pop() : path;
+                            extracted.push(new File([content], name, { type: 'text/plain' }));
+                        }
+                        for (const ef of extracted) {
+                            if (!selectedFiles.find(x => x.name === ef.name)) selectedFiles.push(ef);
+                        }
+                        toast(extracted.length + ' arquivos extraídos do ZIP');
+                    } catch (_) { toast('Erro ao abrir ZIP', 'error'); }
+                    continue;
+                }
+
+                if (!selectedFiles.find(x => x.name === f.name)) selectedFiles.push(f);
+            }
+            renderBulkFileList();
+        }
+
+        function renderBulkFileList() {
+            const el = $('bulkFileList'); $('fBulkSubmit').disabled = !selectedFiles.length;
+            if (!selectedFiles.length) { el.innerHTML = ''; return; }
+            el.innerHTML = '<div style="display:flex;flex-direction:column;gap:4px;max-height:160px;overflow-y:auto">' + selectedFiles.map((f,i) =>
+                '<div class="bulk-file-row"><span>' + icon('file-code',14) + '</span><span class="file-name">' + esc(f.name) + '</span><span style="color:var(--text-tertiary);font-size:0.78rem">' + (f.size<1024?f.size+'B':(f.size/1024).toFixed(1)+'KB') + '</span><button data-bulk-rm="'+i+'" style="background:none;border:none;color:var(--accent-danger);cursor:pointer">' + icon('x',14) + '</button></div>'
+            ).join('') + '</div>';
+            el.querySelectorAll('[data-bulk-rm]').forEach(b => b.addEventListener('click', () => { selectedFiles.splice(+b.dataset.bulkRm,1); renderBulkFileList(); }));
+        }
+
+        $('fBulkSubmit').addEventListener('click', () => {
+            if (!selectedFiles.length) return;
+            closeActionModal();
+            runBulkAnalysis(selectedFiles);
+        });
+    }
+
+    async function runBulkAnalysis(files) {
+        const total = files.length;
+
+        // Create fullscreen overlay
+        const overlay = document.createElement('div');
+        overlay.className = 'bulk-overlay';
+        overlay.id = 'bulkOverlay';
+        overlay.innerHTML = `
+            <div class="circle-progress">
+                <svg viewBox="0 0 180 180">
+                    <circle class="track" cx="90" cy="90" r="80"/>
+                    <circle class="fill" id="circFill" cx="90" cy="90" r="80"/>
+                </svg>
+                <div class="center-text">
+                    <div class="pct" id="circPct">0%</div>
+                    <div class="label" id="circLabel">Enviando...</div>
+                </div>
+            </div>
+            <div style="color:var(--text-primary);font-size:1.1rem;font-weight:600" id="circTitle">Preparando análise...</div>
+            <div style="max-width:500px;width:90%;display:flex;flex-direction:column;gap:6px" id="circFiles"></div>
+        `;
+        document.body.appendChild(overlay);
+
+        const circFill = $('circFill');
+        const circPct = $('circPct');
+        const circLabel = $('circLabel');
+        const circTitle = $('circTitle');
+        const circFiles = $('circFiles');
+        const circumference = 2 * Math.PI * 80; // ~502
+
+        function setPct(pct) {
+            const offset = circumference - (pct / 100) * circumference;
+            circFill.style.strokeDashoffset = offset;
+            circPct.textContent = Math.round(pct) + '%';
+        }
+
+        // Render file rows
+        circFiles.innerHTML = files.map((f, i) =>
+            '<div class="bulk-file-row" id="bf-' + i + '">' +
+                '<span class="icon-spin">' + icon('loader', 16) + '</span>' +
+                '<span class="file-name">' + esc(f.name) + '</span>' +
+                '<span class="file-status" style="color:var(--text-tertiary)">aguardando</span>' +
+            '</div>'
+        ).join('');
+
+        // Phase 1: Submit all files
+        circTitle.textContent = 'Enviando ' + total + ' arquivo(s)...';
+        const jobs = [];
+
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            const row = $('bf-' + i);
+            row.querySelector('.file-status').textContent = 'enviando...';
+
             try {
                 await ensureAuth();
-                const res = await api('POST', `/orgs/${ORG_ID}/repos/bulk`, { repositories: repos });
-                let h = `<div class="form-success">✓ ${res.succeeded.length} adicionados</div>`;
-                if (res.failed.length) h += `<div class="form-error">✗ ${res.failed.length} falharam:<br>${res.failed.map(f => '  • ' + f.full_name + ': ' + f.error).join('<br>')}</div>`;
-                $('fBulkResult').innerHTML = h;
-                if (res.succeeded.length) { toast(`${res.succeeded.length} repos importados!`); setTimeout(() => { closeActionModal(); if (currentPage === 'repositories') loadRepos(); }, 1200); }
-            } catch (e) { $('fBulkResult').innerHTML = `<div class="form-error">✗ ${e.message || JSON.stringify(e)}</div>`; }
-            btn.disabled = false; btn.textContent = 'Importar Todos';
+                const fd = new FormData();
+                fd.append('mr_title', file.name);
+                fd.append('mr_description', 'Análise em massa — ' + file.name);
+                fd.append('file', file);
+                const r = await fetch(API + '/orgs/' + ORG_ID + '/upload-analysis', { method: 'POST', headers: { Authorization: 'Bearer ' + TOKEN }, body: fd });
+                const d = await r.json();
+                if (r.ok) {
+                    jobs.push({ idx: i, name: file.name, id: d.analysis_id, status: 'queued', score: null });
+                    row.querySelector('.file-status').textContent = 'na fila';
+                    row.querySelector('.file-status').style.color = 'var(--accent-warning)';
+                } else {
+                    jobs.push({ idx: i, name: file.name, id: null, status: 'failed', score: null });
+                    row.classList.add('failed');
+                    row.children[0].innerHTML = icon('x-circle', 16);
+                    row.querySelector('.file-status').textContent = 'erro';
+                    row.querySelector('.file-status').style.color = 'var(--accent-danger)';
+                }
+            } catch (e) {
+                jobs.push({ idx: i, name: file.name, id: null, status: 'failed', score: null });
+                row.classList.add('failed');
+                row.children[0].innerHTML = icon('x-circle', 16);
+                row.querySelector('.file-status').textContent = 'erro';
+                row.querySelector('.file-status').style.color = 'var(--accent-danger)';
+            }
+            setPct(((i + 1) / total) * 20);
+        }
+
+        // Phase 2: Poll until all done
+        const pending = jobs.filter(j => j.id);
+        if (!pending.length) {
+            circTitle.textContent = 'Nenhum arquivo pôde ser enviado';
+            circLabel.textContent = 'Tente novamente';
+            setTimeout(() => overlay.remove(), 3000);
+            return;
+        }
+
+        circTitle.textContent = 'IA analisando ' + pending.length + ' arquivo(s)...';
+        circLabel.textContent = 'Analisando...';
+        let done = 0;
+
+        for (let poll = 0; poll < 90; poll++) {
+            await new Promise(r => setTimeout(r, 2000));
+            let allDone = true;
+
+            for (const job of jobs) {
+                if (!job.id || job.status === 'completed' || job.status === 'failed') continue;
+                try {
+                    const r = await fetch(API + '/analyses/' + job.id, { headers: { Authorization: 'Bearer ' + TOKEN } });
+                    const d = await r.json();
+                    const row = $('bf-' + job.idx);
+
+                    if (d.status === 'completed') {
+                        job.status = 'completed'; job.score = d.ai_score; done++;
+                        const g = AnalysisEngine.getScoreGrade(d.ai_score);
+                        row.classList.add('completed');
+                        row.children[0].innerHTML = icon('check-circle', 16);
+                        row.querySelector('.file-status').innerHTML = '<strong style="color:' + g.color + '">' + d.ai_score + '/100</strong>';
+                    } else if (d.status === 'failed') {
+                        job.status = 'failed'; done++;
+                        row.classList.add('failed');
+                        row.children[0].innerHTML = icon('x-circle', 16);
+                        row.querySelector('.file-status').textContent = 'falhou';
+                        row.querySelector('.file-status').style.color = 'var(--accent-danger)';
+                    } else {
+                        allDone = false;
+                        row.querySelector('.file-status').textContent = 'analisando...';
+                        row.querySelector('.file-status').style.color = 'var(--accent-warning)';
+                    }
+                } catch (_) { allDone = false; }
+            }
+
+            const pct = 20 + (done / pending.length) * 80;
+            setPct(pct);
+            circTitle.textContent = done + ' de ' + pending.length + ' concluído(s)';
+
+            if (allDone) break;
+        }
+
+        // Phase 3: Done — show results
+        const ok = jobs.filter(j => j.status === 'completed');
+        const fail = jobs.filter(j => j.status === 'failed');
+        const avg = ok.length ? Math.round(ok.reduce((s, j) => s + (j.score || 0), 0) / ok.length) : 0;
+
+        setPct(100);
+
+        if (ok.length) {
+            const g = AnalysisEngine.getScoreGrade(avg);
+            overlay.innerHTML = `
+                <div class="card stagger-in" style="max-width:500px;width:90%;background:var(--bg-modal);box-shadow:var(--shadow-glow-lg)">
+                    <div class="card-header"><span class="card-title">Análise em Massa Concluída</span><span class="card-badge" style="background:${g.color}20;color:${g.color}">${g.label}</span></div>
+                    <div class="card-body" style="padding:32px;text-align:center">
+                        <div class="score-circle" style="--score-color:${g.color};--score-pct:${avg};color:${g.color};margin:0 auto 20px;width:120px;height:120px;font-size:2.5rem">${avg}</div>
+                        <h3 style="font-size:1.2rem;margin-bottom:8px">Score Médio: ${avg}/100</h3>
+                        <p style="color:var(--text-secondary);margin-bottom:24px">${ok.length} arquivos analisados com sucesso ${fail.length ? `(${fail.length} falhas)` : ''}. ${g.description}</p>
+                        <button class="btn btn-primary" id="bulkCloseBtn" style="width:100%;justify-content:center;padding:12px">${icon('arrow-right')} Ver Resultados</button>
+                    </div>
+                </div>
+            `;
+            if (window.lucide) lucide.createIcons();
+        } else {
+            overlay.innerHTML = `
+                <div class="card stagger-in" style="max-width:500px;width:90%;background:var(--bg-modal);">
+                    <div class="card-body" style="padding:32px;text-align:center">
+                        <div style="color:var(--accent-danger);margin-bottom:16px">${icon('x-circle', 48)}</div>
+                        <h3 style="font-size:1.2rem;margin-bottom:8px">Falha na Análise</h3>
+                        <p style="color:var(--text-secondary);margin-bottom:24px">Nenhum arquivo pôde ser analisado com sucesso.</p>
+                        <button class="btn btn-secondary" id="bulkCloseBtn" style="width:100%;justify-content:center;padding:12px">Fechar</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        $('bulkCloseBtn').addEventListener('click', () => {
+            overlay.remove();
+            document.querySelector('[data-page="merge-requests"]').click();
         });
     }
 
@@ -604,7 +835,7 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
     function renderTeamPage() {
         pageContent.innerHTML = `
             <div class="page-header-row">
-                <div><h1 class="page-title">Equipe</h1><p class="page-subtitle">Gerencie os membros da organizacao</p></div>
+                <div><h1 class="page-title">Equipe</h1><p class="page-subtitle">Gerencie os membros da organização</p></div>
                 ${isAdmin() ? '<div class="page-actions"><button class="btn btn-primary" id="btnInvite">+ Convidar por E-mail</button></div>' : ''}
             </div>
             <div id="teamContainer" style="margin-top:16px">${showLoading()}</div>`;
@@ -618,11 +849,11 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
             await ensureAuth();
             const members = await api('GET', `/orgs/${ORG_ID}/members`);
             if (!members.length) {
-                c.innerHTML = `<div class="empty-state-card"><h3>Nenhum membro</h3><p>Convide membros para sua organizacao</p>
+                c.innerHTML = `<div class="empty-state-card"><h3>Nenhum membro</h3><p>Convide membros para sua organização</p>
                     ${isAdmin() ? '<button class="btn btn-primary" onclick="document.getElementById(\'btnInvite\').click()" style="margin-top:16px">+ Convidar Primeiro Membro</button>' : ''}</div>`;
                 return;
             }
-            c.innerHTML = `<div class="card"><div class="card-header"><span class="card-title">Membros da Organizacao</span><span class="card-badge">${members.length}</span></div>
+            c.innerHTML = `<div class="card"><div class="card-header"><span class="card-title">Membros da Organização</span><span class="card-badge">${members.length}</span></div>
                 <div class="team-grid">${members.map(m => {
                     const initials = m.initials || m.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
                     const isSelf = String(m.id) === String(currentUserId);
@@ -651,12 +882,12 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
     }
 
     async function deleteMember(userId, userName) {
-        const confirmed = confirm(`Tem certeza que deseja remover "${userName}" da organizacao?\n\nEle perdera acesso ao sistema.`);
+        const confirmed = confirm(`Tem certeza que deseja remover "${userName}" da organização?\n\nEle perdera acesso ao sistema.`);
         if (!confirmed) return;
         try {
             await ensureAuth();
             await api('DELETE', `/orgs/${ORG_ID}/members/${userId}`);
-            toast(`${userName} removido da organizacao`);
+            toast(`${userName} removido da organização`);
             loadTeam();
         } catch (e) {
             toast(e.message || 'Erro ao remover membro', 'error');
@@ -671,8 +902,8 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
                 </div>
                 ${formRow('Nome Completo', 'Nome do novo membro', '<input class="input" id="fName" placeholder="Joao Silva">')}
                 ${formRow('E-mail', 'E-mail para acesso', '<input class="input" id="fEmail" type="email" placeholder="joao@empresa.com">')}
-                ${formRow('Cargo', 'Permissoes no sistema', `<select class="input" id="fRole">
-                    <option value="member">Membro — visualiza MRs e analises</option>
+                ${formRow('Cargo', 'Permissões no sistema', `<select class="input" id="fRole">
+                    <option value="member">Membro — visualiza MRs e análises</option>
                     <option value="admin">Admin — gerencia repos, equipe e regras</option>
                 </select>`)}
                 <div class="form-actions">
@@ -778,7 +1009,7 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
     //  MERGE REQUESTS
     // ================================================================
     async function renderMergeRequests(q) {
-        pageContent.innerHTML = `<h1 class="page-title">Merge Requests</h1><p class="page-subtitle">Todos os merge requests com analise detalhada da IA</p>
+        pageContent.innerHTML = `<h1 class="page-title">Merge Requests</h1><p class="page-subtitle">Todos os merge requests com análise detalhada da IA</p>
             <div class="card"><div class="card-header"><span class="card-title">Todos os MRs</span><span class="card-badge" id="mrPageCount">...</span></div><div class="mr-table-container" id="mrPageTable">${showLoading()}</div></div>`;
 
         try {
@@ -868,23 +1099,23 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
 
     function renderOverviewTab() {
         const mr = currentMR, s = AnalysisEngine.getStatusInfo(mr.status);
-        modalBody.innerHTML = `<div class="overview-grid"><div class="overview-item"><span class="overview-label">Autor</span><div class="mr-author" style="margin-top:4px"><div class="mr-author-avatar" style="background:${mr.author.color}">${mr.author.initials}</div><span class="overview-value">${esc(mr.author.name)}</span></div></div><div class="overview-item"><span class="overview-label">Status</span><span class="badge ${s.class}" style="margin-top:4px">${s.icon} ${s.label}</span></div><div class="overview-item"><span class="overview-label">Branch</span><span class="overview-value" style="font-family:'JetBrains Mono',monospace;font-size:0.85rem">${esc(mr.branch)} → ${esc(mr.targetBranch)}</span></div><div class="overview-item"><span class="overview-label">Criado em</span><span class="overview-value">${new Date(mr.createdAt).toLocaleString('pt-BR')}</span></div><div class="overview-item" style="grid-column:1/-1"><span class="overview-label">Descricao</span><span class="overview-value">${esc(mr.description || 'Sem descricao')}</span></div></div><div class="overview-stats"><div class="overview-stat"><div class="overview-stat-value green">+${mr.additions}</div><div class="overview-stat-label">Adicoes</div></div><div class="overview-stat"><div class="overview-stat-value red">-${mr.deletions}</div><div class="overview-stat-label">Remocoes</div></div><div class="overview-stat"><div class="overview-stat-value blue">${mr.filesChanged}</div><div class="overview-stat-label">Arquivos</div></div></div>${mr.files && mr.files.length ? '<h3 style="margin-top:24px;margin-bottom:12px;font-size:1rem;font-weight:700">Arquivos Alterados</h3>' + mr.files.map(f => `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;background:var(--bg-tertiary);border-radius:var(--radius-sm);margin-bottom:4px;font-family:'JetBrains Mono',monospace;font-size:0.82rem"><span>📄 ${esc(f.name || f.file_path || '')}</span><span><span style="color:var(--accent-success)">+${f.additions}</span> <span style="color:var(--accent-danger)">-${f.deletions}</span></span></div>`).join('') : ''}
-        ${mr._repo_id ? `<div style="margin-top:20px"><button class="btn btn-primary" id="btnTriggerAnalysis">🔄 Disparar Analise IA</button></div>` : ''}`;
+        modalBody.innerHTML = `<div class="overview-grid"><div class="overview-item"><span class="overview-label">Autor</span><div class="mr-author" style="margin-top:4px"><div class="mr-author-avatar" style="background:${mr.author.color}">${mr.author.initials}</div><span class="overview-value">${esc(mr.author.name)}</span></div></div><div class="overview-item"><span class="overview-label">Status</span><span class="badge ${s.class}" style="margin-top:4px">${s.icon} ${s.label}</span></div><div class="overview-item"><span class="overview-label">Branch</span><span class="overview-value" style="font-family:'JetBrains Mono',monospace;font-size:0.85rem">${esc(mr.branch)} → ${esc(mr.targetBranch)}</span></div><div class="overview-item"><span class="overview-label">Criado em</span><span class="overview-value">${new Date(mr.createdAt).toLocaleString('pt-BR')}</span></div><div class="overview-item" style="grid-column:1/-1"><span class="overview-label">Descrição</span><span class="overview-value">${esc(mr.description || 'Sem descrição')}</span></div></div><div class="overview-stats"><div class="overview-stat"><div class="overview-stat-value green">+${mr.additions}</div><div class="overview-stat-label">Adicoes</div></div><div class="overview-stat"><div class="overview-stat-value red">-${mr.deletions}</div><div class="overview-stat-label">Remocoes</div></div><div class="overview-stat"><div class="overview-stat-value blue">${mr.filesChanged}</div><div class="overview-stat-label">Arquivos</div></div></div>${mr.files && mr.files.length ? '<h3 style="margin-top:24px;margin-bottom:12px;font-size:1rem;font-weight:700">Arquivos Alterados</h3>' + mr.files.map(f => `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;background:var(--bg-tertiary);border-radius:var(--radius-sm);margin-bottom:4px;font-family:'JetBrains Mono',monospace;font-size:0.82rem"><span>📄 ${esc(f.name || f.file_path || '')}</span><span><span style="color:var(--accent-success)">+${f.additions}</span> <span style="color:var(--accent-danger)">-${f.deletions}</span></span></div>`).join('') : ''}
+        ${mr._repo_id ? `<div style="margin-top:20px"><button class="btn btn-primary" id="btnTriggerAnalysis">${icon('refresh-cw')} Disparar Análise IA</button></div>` : ''}`;
 
         if (mr._repo_id && $('btnTriggerAnalysis')) {
             $('btnTriggerAnalysis').addEventListener('click', async () => {
                 const btn = $('btnTriggerAnalysis'); btn.disabled = true; btn.textContent = 'Iniciando...';
                 try {
                     await api('POST', `/orgs/${ORG_ID}/repos/${mr._repo_id}/mrs/${mr.id}/analyze`);
-                    toast('Analise iniciada! Aguarde...'); btn.textContent = 'Analise em andamento...';
-                } catch (e) { toast(e.message || 'Erro ao iniciar analise', 'error'); btn.disabled = false; btn.textContent = '🔄 Disparar Analise IA'; }
+                    toast('Análise iniciada! Aguarde...'); btn.textContent = 'Análise em andamento...';
+                } catch (e) { toast(e.message || 'Erro ao iniciar análise', 'error'); btn.disabled = false; btn.textContent = 'Disparar Análise IA'; }
             });
         }
     }
 
     function renderAnalysisTab() {
         const mr = currentMR;
-        if (mr.aiScore === null || mr.aiScore === undefined) { modalBody.innerHTML = '<div class="empty-state"><div class="analyzing-indicator" style="font-size:1rem;padding:12px 24px;margin-bottom:16px"><div class="analyzing-dots"><span></span><span></span><span></span></div>Analise em andamento</div><h3>A IA esta analisando este MR</h3></div>'; return; }
+        if (mr.aiScore === null || mr.aiScore === undefined) { modalBody.innerHTML = '<div class="empty-state"><div class="analyzing-indicator" style="font-size:1rem;padding:12px 24px;margin-bottom:16px"><div class="analyzing-dots"><span></span><span></span><span></span></div>Análise em andamento</div><h3>A IA esta analisando este MR</h3></div>'; return; }
         const g = AnalysisEngine.getScoreGrade(mr.aiScore);
         const cats = mr.analysisCategories || {};
         const hasCats = Object.keys(cats).length > 0;
@@ -894,32 +1125,86 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
             const file = i.file || i.file_path || '';
             const desc = i.description || '';
             const sug = i.suggestion || '';
-            return `<div class="issue-card ${sev}"><div class="issue-header"><span class="issue-title">${esc(title)}</span><span class="issue-severity ${sev}">${sev.toUpperCase()}</span></div>${file ? `<div class="issue-file">${esc(file)}${i.line_ref ? ':' + i.line_ref : ''}</div>` : ''}<div class="issue-description">${esc(desc)}</div>${sug ? `<div class="issue-suggestion"><strong>💡 Sugestao</strong> ${esc(sug)}</div>` : ''}</div>`;
+            return `<div class="issue-card ${sev}"><div class="issue-header"><span class="issue-title">${esc(title)}</span><span class="issue-severity ${sev}">${sev.toUpperCase()}</span></div>${file ? `<div class="issue-file">${esc(file)}${i.line_ref ? ':' + i.line_ref : ''}</div>` : ''}<div class="issue-description">${esc(desc)}</div>${sug ? `<div class="issue-suggestion"><strong>${icon('lightbulb', 14)} Sugestão</strong> ${esc(sug)}</div>` : ''}</div>`;
         }).join('')}</div>` : '<div class="empty-state" style="padding:30px"><h3>Sem issues! 🎉</h3></div>'}`;
     }
 
     function renderDiffTab() {
         const mr = currentMR;
-        if (!mr.diff || !mr.diff.length) { modalBody.innerHTML = '<div class="empty-state"><h3>Diff nao disponivel</h3><p>O diff sera carregado apos a analise da IA</p></div>'; return; }
+        if (!mr.diff || !mr.diff.length) { modalBody.innerHTML = '<div class="empty-state"><h3>Diff não disponível</h3><p>O diff será carregado após a análise da IA</p></div>'; return; }
+
         modalBody.innerHTML = mr.diff.map(f => {
             let h = '';
+            const annotations = f.annotations || [];
+            const annotMap = {};
+            annotations.forEach(a => { annotMap[a.afterLine || a.after_line] = a; });
+
             if (f.lines && f.lines.length) {
+                // Has parsed lines — render each with annotations
                 f.lines.forEach(l => {
-                    h += `<div class="diff-line ${l.type}"><span class="diff-line-number">${l.num}</span><span class="diff-line-content">${esc(l.content)}</span></div>`;
-                    if (f.annotations) { const a = f.annotations.find(a => a.afterLine === l.num || a.after_line === l.num); if (a) h += `<div class="diff-annotation ${a.type === 'danger' ? 'danger-annotation' : a.type === 'warning' ? 'warning-annotation' : ''}"><div class="diff-annotation-icon">IA</div><div class="diff-annotation-text">${esc(a.text)}</div></div>`; }
+                    const cls = l.type === 'added' ? 'added' : l.type === 'removed' ? 'removed' : '';
+                    h += `<div class="diff-line ${cls}"><span class="diff-line-number">${l.num}</span><span class="diff-line-content">${esc(l.content)}</span></div>`;
+                    const a = annotMap[l.num];
+                    if (a) h += renderDiffAnnotation(a);
                 });
-            } else if (f.annotations && f.annotations.length) {
-                f.annotations.forEach(a => {
-                    h += `<div class="diff-annotation ${a.type === 'danger' ? 'danger-annotation' : a.type === 'warning' ? 'warning-annotation' : ''}"><div class="diff-annotation-icon">IA</div><div class="diff-annotation-text">${esc(a.text)}</div></div>`;
-                });
+            } else if (f.diff_text) {
+                // Has raw diff text — parse and render
+                h = renderRawDiff(f.diff_text, annotMap);
+            } else if (annotations.length) {
+                // Only annotations, no code — try to fetch from description
+                const desc = mr.description || '';
+                if (desc.includes('+') || desc.includes('def ') || desc.includes('function')) {
+                    const lines = desc.split('\n');
+                    lines.forEach((line, idx) => {
+                        const num = idx + 1;
+                        h += `<div class="diff-line added"><span class="diff-line-number">${num}</span><span class="diff-line-content">${esc(line)}</span></div>`;
+                        const a = annotMap[num];
+                        if (a) h += renderDiffAnnotation(a);
+                    });
+                }
+                // Always show annotations at the end if nothing matched
+                if (!h) {
+                    annotations.forEach(a => { h += renderDiffAnnotation(a); });
+                }
             }
-            return `<div class="diff-file"><div class="diff-file-header"><span>📄 ${esc(f.file)}</span></div><div class="diff-content">${h || '<div style="padding:12px;color:var(--text-tertiary)">Anotacoes da IA disponiveis acima</div>'}</div></div>`;
+
+            return `<div class="diff-file"><div class="diff-file-header"><span>${icon('file-code', 14)} ${esc(f.file)}</span></div><div class="diff-content">${h}</div></div>`;
         }).join('');
+        refreshIcons();
+    }
+
+    function renderDiffAnnotation(a) {
+        const cls = a.type === 'danger' ? 'danger-annotation' : a.type === 'warning' ? 'warning-annotation' : '';
+        return `<div class="diff-annotation ${cls}"><div class="diff-annotation-icon">${a.type === 'danger' ? icon('alert-triangle', 14) : a.type === 'warning' ? icon('alert-circle', 14) : icon('info', 14)}</div><div class="diff-annotation-text">${esc(a.text)}</div></div>`;
+    }
+
+    function renderRawDiff(diffText, annotMap) {
+        let h = '';
+        const lines = diffText.split('\n');
+        let lineNum = 0;
+        for (const line of lines) {
+            // Skip diff headers
+            if (line.startsWith('diff --git') || line.startsWith('---') || line.startsWith('+++') || line.startsWith('@@')) {
+                h += `<div class="diff-line" style="color:var(--text-tertiary);background:var(--bg-tertiary)"><span class="diff-line-number"></span><span class="diff-line-content">${esc(line)}</span></div>`;
+                if (line.startsWith('@@')) {
+                    const match = line.match(/@@ .+\+(\d+)/);
+                    if (match) lineNum = parseInt(match[1]) - 1;
+                }
+                continue;
+            }
+            lineNum++;
+            const type = line.startsWith('+') ? 'added' : line.startsWith('-') ? 'removed' : '';
+            const content = line.startsWith('+') || line.startsWith('-') ? line.slice(1) : line;
+            h += `<div class="diff-line ${type}"><span class="diff-line-number">${lineNum}</span><span class="diff-line-content">${esc(content)}</span></div>`;
+            const a = annotMap[lineNum];
+            if (a) h += renderDiffAnnotation(a);
+        }
+        return h;
     }
 
     function renderRulesTab() {
         const mr = currentMR;
-        if (!mr.rules || !mr.rules.length) { modalBody.innerHTML = '<div class="empty-state"><h3>Regras pendentes</h3><p>As regras serao avaliadas apos a analise da IA</p></div>'; return; }
+        if (!mr.rules || !mr.rules.length) { modalBody.innerHTML = '<div class="empty-state"><h3>Regras pendentes</h3><p>As regras serao avaliadas apos a análise da IA</p></div>'; return; }
         const rules = mr.rules.map(r => ({
             name: r.name || r.rule_name || '',
             status: r.status || 'warn',
@@ -934,7 +1219,7 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
         const mr = currentMR;
         const suggestions = [
             'Quais sao os principais riscos de seguranca?',
-            'Gere testes unitarios para este codigo',
+            'Gere testes unitarios para este código',
             'Como melhorar a performance?',
             'Explique o que esse MR faz em resumo',
             'Tem algum bug potencial?',
@@ -943,8 +1228,8 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
             <div style="display:flex;flex-direction:column;height:100%;min-height:400px">
                 <div id="chatMessages" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px">
                     <div style="padding:16px;background:var(--bg-tertiary);border-radius:var(--radius-md);color:var(--text-secondary)">
-                        <div style="font-weight:700;margin-bottom:8px">💬 Chat com IA sobre "${esc(mr.title || 'este MR')}"</div>
-                        <div style="font-size:0.85rem;color:var(--text-tertiary);margin-bottom:12px">Pergunte qualquer coisa sobre o codigo, issues, seguranca ou melhorias.</div>
+                        <div style="font-weight:700;margin-bottom:8px">${icon('message-circle', 16)} Chat com IA sobre "${esc(mr.title || 'este MR')}"</div>
+                        <div style="font-size:0.85rem;color:var(--text-tertiary);margin-bottom:12px">Pergunte qualquer coisa sobre o código, issues, seguranca ou melhorias.</div>
                         <div style="display:flex;flex-wrap:wrap;gap:6px">
                             ${suggestions.map(s => `<button class="chat-suggestion" data-q="${esc(s)}" style="padding:6px 12px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:20px;font-size:0.78rem;color:var(--accent-primary);cursor:pointer;transition:all 0.15s">${esc(s)}</button>`).join('')}
                         </div>
@@ -1027,14 +1312,14 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
             const secIssues = issues.filter(i => i.severity === 'critical' || i.severity === 'warning');
             if (secIssues.length) {
                 return `<strong>🔒 Riscos de Seguranca Identificados:</strong><br><br>` +
-                    secIssues.map((i, idx) => `<strong>${idx+1}. ${esc(i.title)}</strong><br>${esc(i.description || '')}<br>${i.suggestion ? '<em>💡 ' + esc(i.suggestion) + '</em>' : ''}<br>`).join('<br>') +
+                    secIssues.map((i, idx) => `<strong>${idx+1}. ${esc(i.title)}</strong><br>${esc(i.description || '')}<br>${i.suggestion ? '<em>' + icon('lightbulb', 12) + ' ' + esc(i.suggestion) + '</em>' : ''}<br>`).join('<br>') +
                     `<br>Score de seguranca: <strong>${cats.security || 'N/A'}/100</strong>`;
             }
             return `Score de seguranca: <strong>${cats.security || 'N/A'}/100</strong>. Nenhum risco critico encontrado neste MR.`;
         }
         if (q.includes('teste') || q.includes('test')) {
             const fileNames = files.map(f => f.name || '').filter(Boolean);
-            return `<strong>🧪 Sugestao de Testes para "${esc(title)}":</strong><br><br>` +
+            return `<strong>${icon('flask-conical', 14)} Sugestão de Testes para "${esc(title)}":</strong><br><br>` +
                 `<code style="display:block;padding:12px;background:var(--bg-secondary);border-radius:8px;font-size:0.82rem;line-height:1.6;white-space:pre-wrap">` +
                 `describe('${esc(title.split(' ').slice(0,3).join(' '))}', () => {\n` +
                 fileNames.slice(0, 3).map(f => `  it('deve validar ${esc(f.split('/').pop())}', () => {\n    // Arrange\n    // Act\n    // Assert\n    expect(result).toBeDefined();\n  });\n`).join('\n') +
@@ -1043,28 +1328,28 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
                 `Adapte os nomes e imports conforme a estrutura real do projeto.`;
         }
         if (q.includes('performance') || q.includes('otimiz')) {
-            return `<strong>⚡ Analise de Performance:</strong><br><br>` +
+            return `<strong>⚡ Análise de Performance:</strong><br><br>` +
                 `Score de performance: <strong>${cats.performance || 'N/A'}/100</strong><br><br>` +
                 (issues.filter(i => i.title && i.title.toLowerCase().includes('perform')).length ?
                     issues.filter(i => i.title && i.title.toLowerCase().includes('perform')).map(i => `• ${esc(i.title)}: ${esc(i.description || '')}`).join('<br>') :
                     `Nenhum issue especifico de performance. Verifique:<br>• Uso de cache para dados repetidos<br>• Queries N+1 em loops<br>• Lazy loading de componentes pesados<br>• Indices no banco de dados`);
         }
         if (q.includes('resum') || q.includes('o que') || q.includes('expliq')) {
-            return `<strong>📋 Resumo do MR "${esc(title)}":</strong><br><br>` +
+            return `<strong>${icon('file-text', 14)} Resumo do MR "${esc(title)}":</strong><br><br>` +
                 `• <strong>Branch:</strong> ${esc(mr.branch || '')} → ${esc(mr.targetBranch || '')}<br>` +
                 `• <strong>Arquivos alterados:</strong> ${mr.filesChanged || files.length}<br>` +
                 `• <strong>Adicoes:</strong> +${mr.additions || 0} / Remocoes: -${mr.deletions || 0}<br>` +
                 `• <strong>Score IA:</strong> ${mr.aiScore || 'N/A'}/100<br><br>` +
-                (mr.description ? `<strong>Descricao:</strong> ${esc(mr.description)}<br><br>` : '') +
+                (mr.description ? `<strong>Descrição:</strong> ${esc(mr.description)}<br><br>` : '') +
                 (issues.length ? `<strong>Issues encontradas:</strong> ${issues.length} (${issues.filter(i=>i.severity==='critical').length} criticas, ${issues.filter(i=>i.severity==='warning').length} warnings)` : 'Nenhuma issue encontrada.');
         }
         if (q.includes('bug') || q.includes('erro') || q.includes('problem')) {
             const criticals = issues.filter(i => i.severity === 'critical');
             if (criticals.length) {
                 return `<strong>🐛 Bugs Potenciais Encontrados:</strong><br><br>` +
-                    criticals.map((i, idx) => `<strong>${idx+1}. ${esc(i.title)}</strong><br>Arquivo: <code>${esc(i.file || i.file_path || 'N/A')}</code><br>${esc(i.description || '')}<br>${i.suggestion ? '<em>💡 Fix: ' + esc(i.suggestion) + '</em>' : ''}<br>`).join('<br>');
+                    criticals.map((i, idx) => `<strong>${idx+1}. ${esc(i.title)}</strong><br>Arquivo: <code>${esc(i.file || i.file_path || 'N/A')}</code><br>${esc(i.description || '')}<br>${i.suggestion ? '<em>' + icon('lightbulb', 12) + ' Fix: ' + esc(i.suggestion) + '</em>' : ''}<br>`).join('<br>');
             }
-            return `Nenhum bug critico encontrado pela analise. Score geral: <strong>${mr.aiScore || 'N/A'}/100</strong>. Revise warnings menores nas abas Analise e Regras.`;
+            return `Nenhum bug critico encontrado pela análise. Score geral: <strong>${mr.aiScore || 'N/A'}/100</strong>. Revise warnings menores nas abas Análise e Regras.`;
         }
         // Default
         return `<strong>Sobre "${esc(title)}":</strong><br><br>` +
@@ -1083,7 +1368,7 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
         pageContent.innerHTML = `
             <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
                 <div>
-                    <h1 class="page-title">Regras de Negocio</h1>
+                    <h1 class="page-title">Regras de Negócio</h1>
                     <p class="page-subtitle">Configure as regras que a IA verifica em cada merge request</p>
                 </div>
                 ${isAdmin() ? '<button class="btn btn-primary" id="btnNewRule">+ Nova Regra</button>' : ''}
@@ -1117,7 +1402,7 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
                     <input class="input" id="ruleFormName" value="${esc(rule ? rule.name : '')}" placeholder="Ex: Validar tratamento de erros async">
                 </div>
                 <div>
-                    <label style="font-weight:600;margin-bottom:4px;display:block">Descricao</label>
+                    <label style="font-weight:600;margin-bottom:4px;display:block">Descrição</label>
                     <textarea class="input" id="ruleFormDesc" rows="3" style="resize:vertical" placeholder="Descreva o que a IA deve verificar...">${esc(rule ? (rule.description || '') : '')}</textarea>
                 </div>
                 <div>
@@ -1146,7 +1431,7 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
             const severity = $('ruleFormSev').value;
             const prompt_hint = $('ruleFormHint').value.trim();
 
-            if (!name) { toast('Nome e obrigatorio', 'error'); return; }
+            if (!name) { toast('Nome e obrigatório', 'error'); return; }
 
             const btn = $('ruleFormSave');
             btn.disabled = true; btn.textContent = 'Salvando...';
@@ -1252,7 +1537,7 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
     //  SETTINGS PAGE
     // ================================================================
     async function renderSettingsPage() {
-        pageContent.innerHTML = `<h1 class="page-title">Configurações</h1><p class="page-subtitle">Integrações e preferências — Codexfy AI</p>
+        pageContent.innerHTML = `<h1 class="page-title">Configurações</h1><p class="page-subtitle">Integrações e preferências — Codexify AI</p>
             <div id="settingsContainer">${showLoading()}</div>`;
 
         let settings = { auto_analyze: true, min_score_threshold: 75, notification_email: '', slack_webhook_url: '', discord_webhook_url: '' };
@@ -1263,10 +1548,10 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
         } catch (_) { /* use defaults */ }
 
         $('settingsContainer').innerHTML = `
-            <div class="settings-section stagger-in"><h3 class="settings-section-title">🔗 Integracao Git</h3><div class="settings-card"><div class="settings-row"><div class="settings-row-info"><h4>Plataforma</h4><p>Plataforma de versionamento</p></div><select class="settings-input" style="min-width:180px"><option>GitHub</option><option>GitLab</option><option>Bitbucket</option></select></div><div class="settings-row"><div class="settings-row-info"><h4>Access Token</h4><p>Token com permissao de leitura</p></div><input class="settings-input" type="password" placeholder="ghp_xxx"></div></div></div>
-            <div class="settings-section stagger-in" style="animation-delay:0.15s"><h3 class="settings-section-title">🤖 IA</h3><div class="settings-card"><div class="settings-row"><div class="settings-row-info"><h4>Modelo</h4><p>Modelo de IA para analise</p></div><select class="settings-input" style="min-width:180px"><option>Claude Sonnet 4.6</option><option>Claude Opus 4.6</option><option>GPT-4o</option></select></div><div class="settings-row"><div class="settings-row-info"><h4>Analise Automatica</h4><p>Analisar novos MRs automaticamente</p></div><button class="rule-toggle ${settings.auto_analyze ? 'active' : ''}" id="autoToggle"></button></div><div class="settings-row"><div class="settings-row-info"><h4>Score Minimo</h4><p>MRs abaixo serao sinalizados</p></div><input class="settings-input" type="number" min="0" max="100" value="${settings.min_score_threshold}" id="settingsMinScore" style="min-width:100px;text-align:center"></div></div></div>
-            <div class="settings-section stagger-in" style="animation-delay:0.3s"><h3 class="settings-section-title">🔔 Notificacoes</h3><div class="settings-card"><div class="settings-row"><div class="settings-row-info"><h4>E-mail</h4><p>E-mail para notificacoes</p></div><input class="settings-input" type="email" value="${esc(settings.notification_email || '')}" id="settingsEmail" placeholder="equipe@empresa.com"></div><div class="settings-row"><div class="settings-row-info"><h4>Webhook Slack</h4></div><input class="settings-input" type="text" value="${esc(settings.slack_webhook_url || '')}" id="settingsSlack" placeholder="https://hooks.slack.com/..."></div><div class="settings-row"><div class="settings-row-info"><h4>Webhook Discord</h4></div><input class="settings-input" type="text" value="${esc(settings.discord_webhook_url || '')}" id="settingsDiscord" placeholder="https://discord.com/api/webhooks/..."></div></div></div>
-            <div style="margin-top:20px"><button class="btn btn-primary" id="btnSaveSettings">💾 Salvar Configuracoes</button></div>`;
+            <div class="settings-section stagger-in"><h3 class="settings-section-title">${icon('git-branch')} Integração Git</h3><div class="settings-card"><div class="settings-row"><div class="settings-row-info"><h4>Plataforma</h4><p>Plataforma de versionamento</p></div><select class="settings-input" style="min-width:180px"><option>GitHub</option><option>GitLab</option><option>Bitbucket</option></select></div><div class="settings-row"><div class="settings-row-info"><h4>Access Token</h4><p>Token com permissão de leitura</p></div><input class="settings-input" type="password" placeholder="ghp_xxx"></div></div></div>
+            <div class="settings-section stagger-in" style="animation-delay:0.15s"><h3 class="settings-section-title">${icon('bot')} IA</h3><div class="settings-card"><div class="settings-row"><div class="settings-row-info"><h4>Modelo</h4><p>Modelo de IA para análise</p></div><select class="settings-input" style="min-width:180px"><option>Claude Sonnet 4.6</option><option>Claude Opus 4.6</option><option>GPT-4o</option></select></div><div class="settings-row"><div class="settings-row-info"><h4>Análise Automatica</h4><p>Analisar novos MRs automaticamente</p></div><button class="rule-toggle ${settings.auto_analyze ? 'active' : ''}" id="autoToggle"></button></div><div class="settings-row"><div class="settings-row-info"><h4>Score Minimo</h4><p>MRs abaixo serao sinalizados</p></div><input class="settings-input" type="number" min="0" max="100" value="${settings.min_score_threshold}" id="settingsMinScore" style="min-width:100px;text-align:center"></div></div></div>
+            <div class="settings-section stagger-in" style="animation-delay:0.3s"><h3 class="settings-section-title">${icon('bell')} Notificações</h3><div class="settings-card"><div class="settings-row"><div class="settings-row-info"><h4>E-mail</h4><p>E-mail para notificacoes</p></div><input class="settings-input" type="email" value="${esc(settings.notification_email || '')}" id="settingsEmail" placeholder="equipe@empresa.com"></div><div class="settings-row"><div class="settings-row-info"><h4>Webhook Slack</h4></div><input class="settings-input" type="text" value="${esc(settings.slack_webhook_url || '')}" id="settingsSlack" placeholder="https://hooks.slack.com/..."></div><div class="settings-row"><div class="settings-row-info"><h4>Webhook Discord</h4></div><input class="settings-input" type="text" value="${esc(settings.discord_webhook_url || '')}" id="settingsDiscord" placeholder="https://discord.com/api/webhooks/..."></div></div></div>
+            <div style="margin-top:20px"><button class="btn btn-primary" id="btnSaveSettings">${icon('save')} Salvar Configurações</button></div>`;
 
         const at = $('autoToggle'); if (at) at.addEventListener('click', () => at.classList.toggle('active'));
 
@@ -1281,9 +1566,9 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
                     slack_webhook_url: $('settingsSlack').value,
                     discord_webhook_url: $('settingsDiscord').value,
                 });
-                toast('Configuracoes salvas!');
+                toast('Configurações salvas!');
             } catch (e) { toast(e.message || 'Erro ao salvar', 'error'); }
-            btn.disabled = false; btn.textContent = '💾 Salvar Configuracoes';
+            btn.disabled = false; btn.textContent = 'Salvar Configurações';
         });
     }
 
@@ -1292,19 +1577,19 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
     // ================================================================
     function renderUploadPage() {
         pageContent.innerHTML = `
-            <h1 class="page-title">Analise Rapida</h1>
+            <h1 class="page-title">Análise Rápida</h1>
             <p class="page-subtitle">Envie um arquivo .patch, .zip ou cole o diff diretamente — sem conectar GitHub/GitLab</p>
 
             <div class="card stagger-in" style="animation-delay:0.1s">
-                <div class="card-header"><span class="card-title">Upload de Codigo</span></div>
+                <div class="card-header"><span class="card-title">Upload de Código</span></div>
                 <div class="card-body" style="padding:24px">
-                    ${formRow('Titulo', 'Descreva brevemente o que foi alterado', '<input class="input" id="upTitle" placeholder="Ex: Refatorar módulo de pagamentos">')}
-                    ${formRow('Descricao', 'Opcional', '<textarea class="input" id="upDesc" rows="2" placeholder="Detalhes adicionais..." style="resize:vertical"></textarea>')}
+                    ${formRow('Título', 'Descreva brevemente o que foi alterado', '<input class="input" id="upTitle" placeholder="Ex: Refatorar módulo de pagamentos">')}
+                    ${formRow('Descrição', 'Opcional', '<textarea class="input" id="upDesc" rows="2" placeholder="Detalhes adicionais..." style="resize:vertical"></textarea>')}
                     ${formRow('Arquivo', '.patch, .diff, .txt ou .zip', '<input type="file" id="upFile" accept=".patch,.diff,.txt,.zip" class="input">')}
                     <div style="text-align:center;color:var(--text-tertiary);margin:12px 0;font-weight:600">— OU —</div>
                     ${formRow('Diff inline', 'Cole o diff diretamente aqui', '<textarea class="input" id="upDiff" rows="8" style="width:100%;font-family:JetBrains Mono,monospace;font-size:0.82rem;resize:vertical" placeholder="diff --git a/file.py b/file.py\n--- a/file.py\n+++ b/file.py\n@@ -1,3 +1,4 @@\n+import os\n ..."></textarea>')}
                     <div style="margin-top:16px;display:flex;gap:12px;align-items:center">
-                        <button class="btn btn-primary" id="upSubmit">🚀 Analisar com IA</button>
+                        <button class="btn btn-primary" id="upSubmit">${icon('sparkles')} Analisar com IA</button>
                         <span id="upStatus" style="color:var(--text-tertiary);font-size:0.9rem"></span>
                     </div>
                 </div>
@@ -1313,7 +1598,7 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
             <!-- SSE Progress -->
             <div id="upProgress" style="display:none;margin-top:16px">
                 <div class="card">
-                    <div class="card-header"><span class="card-title">Progresso da Analise</span></div>
+                    <div class="card-header"><span class="card-title">Progresso da Análise</span></div>
                     <div class="card-body" style="padding:24px">
                         <div style="display:flex;gap:20px;margin-bottom:16px" id="upSteps">
                             <div class="up-step" id="upStep1"><div class="up-step-dot active"></div><span>Na fila</span></div>
@@ -1363,7 +1648,7 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
             const data = await r.json();
             if (!r.ok) throw data;
 
-            toast('Analise iniciada!');
+            toast('Análise iniciada!');
             $('upProgress').style.display = 'block';
 
             // Start SSE to track progress
@@ -1371,7 +1656,7 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
 
         } catch (e) {
             toast(e.message || e.detail || 'Erro ao enviar', 'error');
-            btn.disabled = false; btn.textContent = '🚀 Analisar com IA';
+            btn.disabled = false; btn.textContent = 'Analisar com IA';
         }
     }
 
@@ -1394,8 +1679,8 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
                 evtSource.close();
                 fill.style.background = 'var(--accent-success)';
                 $('upSubmit').disabled = false;
-                $('upSubmit').textContent = '🚀 Analisar com IA';
-                toast('Analise concluida! Score: ' + data.ai_score);
+                $('upSubmit').textContent = 'Analisar com IA';
+                toast('Análise concluida! Score: ' + data.ai_score);
 
                 // Show result card
                 const g = AnalysisEngine.getScoreGrade(data.ai_score);
@@ -1411,10 +1696,10 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
             } else if (data.status === 'failed') {
                 evtSource.close();
                 fill.style.background = 'var(--accent-danger)';
-                label.textContent = 'Erro: ' + (data.error_message || 'Falha na analise');
+                label.textContent = 'Erro: ' + (data.error_message || 'Falha na análise');
                 $('upSubmit').disabled = false;
-                $('upSubmit').textContent = '🚀 Analisar com IA';
-                toast('Analise falhou', 'error');
+                $('upSubmit').textContent = 'Analisar com IA';
+                toast('Análise falhou', 'error');
             }
         };
         evtSource.onerror = () => { evtSource.close(); };
@@ -1434,7 +1719,7 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
             const data = await api('GET', `/orgs/${ORG_ID}/dashboard/analytics`);
             renderAnalyticsData(data);
         } catch (e) {
-            $('analyticsContainer').innerHTML = `<div class="empty-state-card"><h3>Sem dados</h3><p>${e.message || 'Adicione repositorios e analise MRs para ver analytics'}</p></div>`;
+            $('analyticsContainer').innerHTML = `<div class="empty-state-card"><h3>Sem dados</h3><p>${e.message || 'Adicione repositórios e análise MRs para ver analytics'}</p></div>`;
         }
     }
 
@@ -1443,7 +1728,7 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
 
         let devRows = '';
         dev_ranking.forEach((d, i) => {
-            const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i+1}`;
+            const medal = i === 0 ? icon('crown', 18) : i === 1 ? icon('medal', 18) : i === 2 ? icon('award', 18) : `#${i+1}`;
             const g = d.avg_score > 0 ? AnalysisEngine.getScoreGrade(d.avg_score) : { color: 'var(--text-tertiary)' };
             devRows += `<tr>
                 <td style="font-weight:700">${medal}</td>
@@ -1466,9 +1751,9 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
         $('analyticsContainer').innerHTML = `
             <!-- Dev Ranking -->
             <div class="card stagger-in" style="animation-delay:0.1s">
-                <div class="card-header"><span class="card-title">🏆 Ranking de Desenvolvedores</span><span class="card-badge">${dev_ranking.length} devs</span></div>
+                <div class="card-header"><span class="card-title"><span class="icon-bounce">${icon('trophy')}</span> Ranking de Desenvolvedores</span><span class="card-badge">${dev_ranking.length} devs</span></div>
                 <div class="card-body">${dev_ranking.length ? `
-                    <table class="mr-table"><thead><tr><th>#</th><th>Dev</th><th>Score Medio</th><th>Total MRs</th><th>Aprovados</th><th>Issues</th></tr></thead>
+                    <table class="mr-table"><thead><tr><th>#</th><th>Dev</th><th>Score Médio</th><th>Total MRs</th><th>Aprovados</th><th>Issues</th></tr></thead>
                     <tbody>${devRows}</tbody></table>
                 ` : '<div class="empty-state"><h3>Nenhum dado</h3></div>'}</div>
             </div>
@@ -1476,12 +1761,12 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
             <div class="dashboard-grid" style="margin-top:16px">
                 <!-- Issue Heatmap -->
                 <div class="card stagger-in" style="animation-delay:0.2s">
-                    <div class="card-header"><span class="card-title">🔥 Heatmap de Issues</span></div>
+                    <div class="card-header"><span class="card-title"><span class="icon-pulse">${icon('flame')}</span> Heatmap de Issues</span></div>
                     <div class="card-body" style="padding:24px">
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
                             <div style="padding:16px;border-radius:var(--radius-md);background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.2)">
                                 <div style="font-size:1.8rem;font-weight:800;color:var(--accent-danger)">${issue_heatmap.critical || 0}</div>
-                                <div style="color:var(--text-secondary);font-size:0.85rem">Criticas</div>
+                                <div style="color:var(--text-secondary);font-size:0.85rem">Críticas</div>
                                 <div style="margin-top:4px;height:4px;background:var(--bg-tertiary);border-radius:2px"><div style="height:100%;width:${((issue_heatmap.critical||0)/heatTotal)*100}%;background:var(--accent-danger);border-radius:2px"></div></div>
                             </div>
                             <div style="padding:16px;border-radius:var(--radius-md);background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.2)">
@@ -1496,7 +1781,7 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
                             </div>
                             <div style="padding:16px;border-radius:var(--radius-md);background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.2)">
                                 <div style="font-size:1.8rem;font-weight:800;color:var(--accent-success)">${issue_heatmap.suggestion || 0}</div>
-                                <div style="color:var(--text-secondary);font-size:0.85rem">Sugestoes</div>
+                                <div style="color:var(--text-secondary);font-size:0.85rem">Sugestões</div>
                                 <div style="margin-top:4px;height:4px;background:var(--bg-tertiary);border-radius:2px"><div style="height:100%;width:${((issue_heatmap.suggestion||0)/heatTotal)*100}%;background:var(--accent-success);border-radius:2px"></div></div>
                             </div>
                         </div>
@@ -1505,7 +1790,7 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
 
                 <!-- Score Evolution -->
                 <div class="card stagger-in" style="animation-delay:0.3s">
-                    <div class="card-header"><span class="card-title">📈 Evolucao do Score</span><span class="card-badge">Ultimas 8 semanas</span></div>
+                    <div class="card-header"><span class="card-title"><span class="icon-bounce">${icon('trending-up')}</span> Evolução do Score</span><span class="card-badge">Últimas 8 semanas</span></div>
                     <div class="card-body"><div class="chart-container">${evolutionBars || '<div style="padding:20px;color:var(--text-tertiary)">Sem dados</div>'}</div></div>
                 </div>
             </div>`;
@@ -1559,10 +1844,10 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
                 <div style="font-size:1.2rem;font-weight:800;color:var(--text-primary);margin-bottom:4px">${esc(p.name)}</div>
                 <div style="font-size:1.6rem;font-weight:800;color:var(--accent-primary);margin-bottom:12px">${price}</div>
                 <div style="font-size:0.85rem;color:var(--text-secondary);line-height:1.8">
-                    <div>📦 ${p.max_repos === -1 ? 'Repos ilimitados' : p.max_repos + ' repos'}</div>
-                    <div>🔍 ${p.max_analyses === -1 ? 'Analises ilimitadas' : p.max_analyses + ' analises/mes'}</div>
-                    <div>👥 ${p.max_members === -1 ? 'Membros ilimitados' : p.max_members + ' membros'}</div>
-                    <div>💬 ${p.max_chat_msgs === -1 ? 'Chat ilimitado' : p.max_chat_msgs + ' msgs chat/mes'}</div>
+                    <div>${icon('folder-git-2', 14)} ${p.max_repos === -1 ? 'Repos ilimitados' : p.max_repos + ' repos'}</div>
+                    <div>${icon('search', 14)} ${p.max_analyses === -1 ? 'Análises ilimitadas' : p.max_analyses + ' análises/mes'}</div>
+                    <div>${icon('users', 14)} ${p.max_members === -1 ? 'Membros ilimitados' : p.max_members + ' membros'}</div>
+                    <div>${icon('message-circle', 14)} ${p.max_chat_msgs === -1 ? 'Chat ilimitado' : p.max_chat_msgs + ' msgs chat/mes'}</div>
                 </div>
                 ${!isCurrent ? `<button class="btn ${p.price_monthly > 0 ? 'btn-primary' : 'btn-secondary'}" style="width:100%;margin-top:16px" data-change-plan="${p.slug}">${p.price_monthly > 0 ? 'Upgrade' : 'Selecionar'}</button>` : '<div style="margin-top:16px;text-align:center;color:var(--accent-success);font-weight:600">Plano ativo</div>'}
             </div>`;
@@ -1573,7 +1858,7 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
             <div class="card stagger-in" style="animation-delay:0.1s">
                 <div class="card-header"><span class="card-title">Uso Atual — ${esc(plan.name || 'Free')}</span></div>
                 <div class="card-body" style="padding:24px">
-                    ${usageBar('Analises IA', usage.analyses || 0, plan.max_analyses || 50)}
+                    ${usageBar('Análises IA', usage.analyses || 0, plan.max_analyses || 50)}
                     ${usageBar('Mensagens Chat', usage.chat_msgs || 0, plan.max_chat_msgs || 20)}
                     ${usageBar('Chamadas API', usage.api_calls || 0, plan.max_analyses || 50)}
                 </div>
@@ -1587,7 +1872,7 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
 
             <!-- API Key section -->
             <div class="card stagger-in" style="animation-delay:0.3s;margin-top:24px">
-                <div class="card-header"><span class="card-title">🔑 API Key (para CLI / CI/CD)</span></div>
+                <div class="card-header"><span class="card-title">${icon('key')} API Key (para CLI / CI/CD)</span></div>
                 <div class="card-body" style="padding:24px">
                     <p style="color:var(--text-secondary);margin-bottom:12px">Crie uma API key para usar no CLI ou CI/CD. A key sera exibida apenas uma vez.</p>
                     <div style="display:flex;gap:8px">
@@ -1650,11 +1935,38 @@ gitlab,empresa/mobile,glpat-xyz789"></textarea>
     // ================================================================
     //  LOGS PAGE
     // ================================================================
-    function renderLogsPage() {
-        const logs = window.CodexfyLogs || [];
-        pageContent.innerHTML = `<h1 class="page-title">Logs de Atividade</h1><p class="page-subtitle">Historico de acoes do sistema</p>
-            <div class="card"><div class="card-header"><span class="card-title">Logs</span><span class="card-badge">${logs.length}</span></div>
-            <div class="card-body">${logs.length ? `<table class="mr-table"><thead><tr><th></th><th>Acao</th><th>Detalhes</th><th>Usuario</th><th>Data</th></tr></thead><tbody>${logs.map(l => `<tr><td>${l.icon || ''}</td><td>${esc(l.action)}</td><td style="color:var(--text-secondary)">${esc(l.detail)}</td><td>${esc(l.user)}</td><td style="white-space:nowrap;color:var(--text-tertiary)">${new Date(l.time).toLocaleString('pt-BR')}</td></tr>`).join('')}</tbody></table>` : '<div class="empty-state"><h3>Nenhum log</h3></div>'}</div></div>`;
+    const LOG_ICONS = {
+        analysis_completed: 'search', mr_created: 'git-pull-request', mr_merged: 'git-merge',
+        mr_rejected: 'x-circle', repo_added: 'folder-plus', repo_synced: 'refresh-cw',
+        member_invited: 'user-plus', member_removed: 'user-minus', rule_changed: 'settings',
+        login: 'log-in', default: 'activity',
+    };
+
+    async function renderLogsPage() {
+        pageContent.innerHTML = `<h1 class="page-title">Logs de Atividade</h1><p class="page-subtitle">Histórico de ações do sistema</p>
+            <div id="logsContainer">${showLoading()}</div>`;
+
+        let logs = [];
+        try {
+            await ensureAuth();
+            logs = await api('GET', `/orgs/${ORG_ID}/dashboard/activity?limit=50`);
+        } catch (_) {}
+
+        const c = $('logsContainer');
+        if (!logs.length) {
+            c.innerHTML = '<div class="card"><div class="card-body"><div class="empty-state"><h3>Nenhum log registrado</h3><p>As atividades aparecerão aqui conforme você usa o sistema</p></div></div></div>';
+            return;
+        }
+
+        c.innerHTML = `<div class="card"><div class="card-header"><span class="card-title">${icon('activity')} Logs</span><span class="card-badge">${logs.length}</span></div>
+            <div class="card-body"><table class="mr-table"><thead><tr><th></th><th>Ação</th><th>Detalhes</th><th>Usuário</th><th>Data</th></tr></thead><tbody>${logs.map(l => {
+                const evType = l.event_type || 'default';
+                const lucideIcon = LOG_ICONS[evType] || LOG_ICONS.default;
+                const desc = l.description || evType.replace(/_/g, ' ');
+                const user = l.user_name || l.user_email || 'Sistema';
+                const date = l.created_at ? new Date(l.created_at).toLocaleString('pt-BR') : '';
+                return `<tr><td><i data-lucide="${lucideIcon}" style="width:18px;height:18px;color:var(--accent-tertiary)"></i></td><td><strong>${esc(desc)}</strong></td><td style="color:var(--text-secondary)">${esc(l.metadata || l.detail || '')}</td><td>${esc(user)}</td><td style="white-space:nowrap;color:var(--text-tertiary)">${date}</td></tr>`;
+            }).join('')}</tbody></table></div></div>`;
     }
 
     // ── Init ─────────────────────────────────────────────────

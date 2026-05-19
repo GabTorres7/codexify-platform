@@ -52,21 +52,8 @@ const kbdOverlay=$('kbdModalOverlay');
 let notifications=[];
 let notificationsLoaded=false;
 
-// ── Logs Data ──
-const LOGS_DATA=[
-  {icon:'🔐',cat:'auth',action:'Login realizado',detail:'admin@codexfy.com fez login no sistema',user:'Admin',time:'2026-05-06T08:30:00'},
-  {icon:'📦',cat:'repo',action:'Repositório adicionado',detail:'empresa/backend-api (GitHub) foi cadastrado',user:'Admin',time:'2026-05-06T08:15:00'},
-  {icon:'🔀',cat:'mr',action:'MR analisado pela IA',detail:'MR #1 "OAuth2 auth" — Score: 62/100',user:'Sistema',time:'2026-05-06T07:50:00'},
-  {icon:'👤',cat:'team',action:'Membro convidado',detail:'Carlos Oliveira (carlos@empresa.com) adicionado como Membro',user:'Admin',time:'2026-05-06T07:30:00'},
-  {icon:'⚙',cat:'system',action:'Regra ativada',detail:'"Tratamento de Erros Async" foi habilitada',user:'Admin',time:'2026-05-06T07:00:00'},
-  {icon:'🔀',cat:'mr',action:'MR aprovado',detail:'MR #2 "Refatorar notificações" aprovado com score 91',user:'Sistema',time:'2026-05-05T18:00:00'},
-  {icon:'🔀',cat:'mr',action:'MR merged',detail:'MR #7 "Otimizar queries N+1" merged com sucesso',user:'Beatriz Souza',time:'2026-05-05T16:00:00'},
-  {icon:'📦',cat:'repo',action:'Repositório sincronizado',detail:'empresa/frontend-web sincronização concluída',user:'Sistema',time:'2026-05-05T14:00:00'},
-  {icon:'🔐',cat:'auth',action:'Senha alterada',detail:'admin@codexfy.com alterou a senha',user:'Admin',time:'2026-05-05T10:00:00'},
-  {icon:'👤',cat:'team',action:'Cargo alterado',detail:'Ana Santos promovida a Admin',user:'Admin',time:'2026-05-04T16:00:00'},
-  {icon:'⚙',cat:'system',action:'Configuração atualizada',detail:'Score mínimo alterado para 75',user:'Admin',time:'2026-05-04T12:00:00'},
-  {icon:'🔀',cat:'mr',action:'MR rejeitado',detail:'MR #4 "Race condition" rejeitado — Score: 55',user:'Sistema',time:'2026-05-04T09:00:00'},
-];
+// ── Logs Data (loaded from API) ──
+let LOGS_DATA=[];
 
 let currentUser={name:'Admin',email:'admin@codexfy.com',initials:'AD'};
 
@@ -92,6 +79,12 @@ function showAuth(){
     currentUser.email=localStorage.getItem('cx_email')||'admin@codexfy.com';
     currentUser.initials=(currentUser.name||'U').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
     showApp();
+  } else {
+    // If coming from landing page with #register, show register form
+    if(window.location.hash === '#register'){
+      loginForm.classList.remove('active');
+      regForm.classList.add('active');
+    }
   }
 })();
 
@@ -188,13 +181,13 @@ $('btnPrefs').addEventListener('click',()=>{userDropdown.classList.remove('open'
 
 // ── Notifications ──
 const NOTIF_ICONS = {
-  analysis_completed: '🔍',
-  mr_merged: '🔀',
-  mr_rejected: '❌',
-  repo_added: '📦',
-  repo_synced: '🔄',
-  member_invited: '👤',
-  rule_changed: '⚙',
+  analysis_completed: '<i data-lucide="search" style="width:16px;height:16px"></i>',
+  mr_merged: '<i data-lucide="git-merge" style="width:16px;height:16px"></i>',
+  mr_rejected: '<i data-lucide="x-circle" style="width:16px;height:16px"></i>',
+  repo_added: '<i data-lucide="folder-plus" style="width:16px;height:16px"></i>',
+  repo_synced: '<i data-lucide="refresh-cw" style="width:16px;height:16px"></i>',
+  member_invited: '<i data-lucide="user-plus" style="width:16px;height:16px"></i>',
+  rule_changed: '<i data-lucide="settings" style="width:16px;height:16px"></i>',
 };
 const NOTIF_TYPES = {
   analysis_completed: 'success',
@@ -249,8 +242,8 @@ function renderNotifications(){
     list.innerHTML=`
       <div class="notif-empty">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.4;margin-bottom:8px"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-        <div>Nenhuma notificacao</div>
-        <div style="font-size:0.78rem;margin-top:4px;opacity:0.6">Analise um MR para receber atualizacoes</div>
+        <div>Nenhuma notificação</div>
+        <div style="font-size:0.78rem;margin-top:4px;opacity:0.6">Analise um MR para receber atualizações</div>
       </div>`;
     return;
   }

@@ -70,6 +70,11 @@ def create_app() -> FastAPI:
 
     @app.get("/", include_in_schema=False)
     async def root():
+        import pathlib
+        landing = pathlib.Path(__file__).resolve().parent.parent.parent / "codeguard-ai" / "landing.html"
+        if landing.is_file():
+            from fastapi.responses import HTMLResponse
+            return HTMLResponse(landing.read_text(encoding="utf-8"))
         return RedirectResponse(url="/app/index.html")
 
     @app.get("/health", tags=["Health"])

@@ -120,6 +120,7 @@ class AnalysisService:
             # Ensure ai_score is computed correctly
             ai_score = compute_weighted_score(claude_result)
             claude_result["ai_score"] = ai_score
+            claude_result["_files_diff"] = files_diff
 
             # 4. Persist results
             await self._persist_results(db, analysis_id, mr, repo, claude_result, file_diffs)
@@ -340,6 +341,7 @@ class AnalysisService:
 
             ai_score = compute_weighted_score(claude_result)
             claude_result["ai_score"] = ai_score
+            claude_result["_files_diff"] = files_diff
 
             # Persist results (using a virtual "repo" dict for compatibility)
             virtual_repo = {"min_score": 75, "org_id": None, "id": None}

@@ -57,10 +57,16 @@ async def send_invite_email(
         msg["To"] = to_email
         msg.attach(MIMEText(html, "html"))
 
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as server:
-            server.starttls()
-            server.login(settings.smtp_user, settings.smtp_password)
-            server.send_message(msg)
+        port = settings.smtp_port
+        if port == 465:
+            with smtplib.SMTP_SSL(settings.smtp_host, port) as server:
+                server.login(settings.smtp_user, settings.smtp_password)
+                server.send_message(msg)
+        else:
+            with smtplib.SMTP(settings.smtp_host, port, timeout=10) as server:
+                server.starttls()
+                server.login(settings.smtp_user, settings.smtp_password)
+                server.send_message(msg)
 
         logger.info("invite_email_sent", to=to_email)
         return True

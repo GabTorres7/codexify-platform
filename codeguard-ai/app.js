@@ -297,8 +297,8 @@
                     <div><strong>Convidar Membro</strong><span>Adicionar alguém à equipe</span></div>
                 </button>
                 <button class="quick-action-btn" id="qaBtnBulk">
-                    <div class="qa-icon icon-bounce">${icon('upload', 24)}</div>
-                    <div><strong>Importar em Massa</strong><span>Vários repos de uma vez</span></div>
+                    <div class="qa-icon icon-bounce">${icon('sparkles', 24)}</div>
+                    <div><strong>Análise Rápida</strong><span>Enviar arquivos para análise</span></div>
                 </button>
             </div>
 
@@ -319,7 +319,7 @@
 
         $('qaBtnAddRepo').addEventListener('click', openAddRepoModal);
         $('qaBtnInvite').addEventListener('click', openInviteMemberModal);
-        $('qaBtnBulk').addEventListener('click', openBulkAddModal);
+        $('qaBtnBulk').addEventListener('click', () => { document.querySelector('[data-page="merge-requests"]').click(); setTimeout(openBulkAddModal, 300); });
         $('exportCsvBtn').addEventListener('click', () => {
             const mrs = cachedMRs.map(normalizeMR);
             AnalysisEngine.exportCSV(mrs);
@@ -482,7 +482,7 @@
             <div class="page-header-row">
                 <div><h1 class="page-title">Repositórios</h1><p class="page-subtitle">Gerencie os repositórios monitorados pela IA</p></div>
                 ${isAdmin() ? `<div class="page-actions">
-                    <button class="btn btn-secondary" id="btnBulkAdd">Importar em Massa</button>
+                    <button class="btn btn-secondary" id="btnBulkRepos">${icon('layers')} Adicionar Vários</button>
                     <button class="btn btn-primary" id="btnAddRepo">+ Adicionar Repositório</button>
                 </div>` : ''}
             </div>
@@ -492,7 +492,7 @@
                 <div class="info-icon">${icon('lightbulb', 20)}</div>
                 <div>
                     <strong>Como adicionar repositórios?</strong>
-                    <p>Clique em <em>"+ Adicionar Repositório"</em> para adicionar um por um, ou <em>"Importar em Massa"</em> para enviar varios de uma vez (ideal para empresas). Voce precisa do <strong>access token</strong> da plataforma (GitHub ou GitLab).</p>
+                    <p>Clique em <em>"+ Adicionar Repositório"</em> para adicionar um por um, ou <em>"Adicionar Vários"</em> para cadastrar múltiplos repos com um único token (ideal para empresas). Crie um <strong>Personal Access Token</strong> no GitHub com permissão <code>public_repo</code>.</p>
                 </div>
             </div>
 
@@ -517,47 +517,96 @@
             </div>`;
 
         if ($('btnAddRepo')) $('btnAddRepo').addEventListener('click', openAddRepoModal);
-        if ($('btnBulkAdd')) $('btnBulkAdd').addEventListener('click', openBulkAddModal);
+        if ($('btnBulkRepos')) $('btnBulkRepos').addEventListener('click', openBulkReposModal);
         attachExampleRepoListeners();
         loadRepos();
     }
+
+    let allRepos = [];
+    let repoPage = 1;
+    const REPOS_PER_PAGE = 12;
 
     async function loadRepos() {
         const c = $('reposListContainer');
         try {
             await ensureAuth();
-            const repos = await api('GET', `/orgs/${ORG_ID}/repos`);
-            if (!repos.length) {
+            allRepos = await api('GET', `/orgs/${ORG_ID}/repos`);
+            if (!allRepos.length) {
                 c.innerHTML = `<div class="empty-state-card"><svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg><h3>Nenhum repositório cadastrado</h3><p>Comece adicionando seus repositórios GitHub ou GitLab</p><button class="btn btn-primary" onclick="document.getElementById('btnAddRepo').click()" style="margin-top:16px">+ Adicionar Primeiro Repositório</button></div>`;
                 return;
             }
-            c.innerHTML = `<div class="card"><div class="card-header"><span class="card-title">Repositórios Cadastrados</span><span class="card-badge">${repos.length}</span></div>
-                <div class="repos-grid">${repos.map(r => `
-                    <div class="repo-card">
-                        <div class="repo-card-top">
-                            <div class="repo-platform-badge ${r.platform}">${r.platform === 'github' ? icon("github") + ' GitHub' : icon("gitlab") + ' GitLab'}</div>
-                            ${isAdmin() ? `<div class="repo-actions">
-                                <button class="btn-icon" title="Sincronizar" data-sync="${r.id}"><i data-lucide="refresh-cw" style="width:16px;height:16px"></i>button>
-                                <button class="btn-icon btn-danger" title="Remover" data-del="${r.id}"><i data-lucide="trash-2" style="width:16px;height:16px"></i>button>
-                            </div>` : ''}
-                        </div>
-                        <div class="repo-card-name">${esc(r.full_name)}</div>
-                        <div class="repo-card-branch">Branch: ${r.default_branch}</div>
-                        <div class="repo-card-footer">
-                            <span style="color:${r.auto_analyze ? 'var(--accent-success)' : 'var(--text-tertiary)'}">${r.auto_analyze ? icon('check-circle', 14) + ' Auto-Análise' : icon('circle', 14) + ' Manual'}</span>
-                            <span>Score min: ${r.min_score}</span>
-                        </div>
-                    </div>
-                `).join('')}</div></div>`;
-
-            c.querySelectorAll('[data-sync]').forEach(b => b.addEventListener('click', async () => {
-                b.disabled = true; try { await api('POST', `/orgs/${ORG_ID}/repos/${b.dataset.sync}/sync`); toast('Sync iniciada!'); } catch (e) { toast(e.message || 'Erro', 'error'); } b.disabled = false;
-            }));
-            c.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', async () => {
-                if (!confirm('Remover este repositório e todos os seus dados?')) return;
-                try { await api('DELETE', `/orgs/${ORG_ID}/repos/${b.dataset.del}`); toast('Removido!'); loadRepos(); } catch (e) { toast(e.message || 'Erro', 'error'); }
-            }));
+            repoPage = 1;
+            renderReposList();
         } catch (e) { c.innerHTML = `<div class="empty-state-card"><h3>Erro ao carregar</h3><p>${e.message || e.detail || 'Verifique a API'}</p></div>`; }
+    }
+
+    function renderReposList() {
+        const c = $('reposListContainer');
+        const searchVal = ($('repoSearch') ? $('repoSearch').value : '').toLowerCase();
+        const filterPlat = $('repoFilterPlatform') ? $('repoFilterPlatform').value : 'all';
+
+        let filtered = allRepos;
+        if (searchVal) filtered = filtered.filter(r => r.full_name.toLowerCase().includes(searchVal) || (r.default_branch || '').toLowerCase().includes(searchVal));
+        if (filterPlat !== 'all') filtered = filtered.filter(r => r.platform === filterPlat);
+
+        const totalPages = Math.max(1, Math.ceil(filtered.length / REPOS_PER_PAGE));
+        if (repoPage > totalPages) repoPage = totalPages;
+        const start = (repoPage - 1) * REPOS_PER_PAGE;
+        const pageRepos = filtered.slice(start, start + REPOS_PER_PAGE);
+
+        c.innerHTML = `<div class="card">
+            <div class="card-header" style="flex-wrap:wrap;gap:12px">
+                <span class="card-title">Repositórios Cadastrados</span>
+                <span class="card-badge">${filtered.length}</span>
+                <div style="display:flex;gap:8px;margin-left:auto;flex-wrap:wrap;align-items:center">
+                    <div style="position:relative;display:flex;align-items:center">
+                        <span style="position:absolute;left:10px;color:var(--text-tertiary);pointer-events:none">${icon('search', 15)}</span>
+                        <input class="input" id="repoSearch" type="text" placeholder="Buscar repositório..." value="${esc(searchVal)}" style="padding-left:34px;width:220px;height:36px;font-size:0.85rem">
+                    </div>
+                    <select class="input" id="repoFilterPlatform" style="height:36px;font-size:0.85rem;width:auto">
+                        <option value="all">Todas</option>
+                        <option value="github" ${filterPlat === 'github' ? 'selected' : ''}>GitHub</option>
+                        <option value="gitlab" ${filterPlat === 'gitlab' ? 'selected' : ''}>GitLab</option>
+                    </select>
+                </div>
+            </div>
+            <div class="repos-grid">${pageRepos.map(r => `
+                <div class="repo-card">
+                    <div class="repo-card-top">
+                        <div class="repo-platform-badge ${r.platform}">${r.platform === 'github' ? icon("github") + ' GitHub' : icon("gitlab") + ' GitLab'}</div>
+                        ${isAdmin() ? `<div class="repo-actions">
+                            <button class="btn-icon" title="Sincronizar" data-sync="${r.id}"><i data-lucide="refresh-cw" style="width:16px;height:16px"></i></button>
+                            <button class="btn-icon btn-danger" title="Remover" data-del="${r.id}"><i data-lucide="trash-2" style="width:16px;height:16px"></i></button>
+                        </div>` : ''}
+                    </div>
+                    <div class="repo-card-name">${esc(r.full_name)}</div>
+                    <div class="repo-card-branch">Branch: ${r.default_branch}</div>
+                    <div class="repo-card-footer">
+                        <span style="color:${r.auto_analyze ? 'var(--accent-success)' : 'var(--text-tertiary)'}">${r.auto_analyze ? icon('check-circle', 14) + ' Auto-Análise' : icon('circle', 14) + ' Manual'}</span>
+                        <span>Score min: ${r.min_score}</span>
+                    </div>
+                </div>
+            `).join('')}</div>
+            ${totalPages > 1 ? `<div class="repo-pagination">
+                <button class="btn btn-secondary btn-sm" id="repoPrev" ${repoPage <= 1 ? 'disabled' : ''}>${icon('chevron-left', 14)} Anterior</button>
+                <span style="color:var(--text-secondary);font-size:0.88rem">Página <strong>${repoPage}</strong> de <strong>${totalPages}</strong></span>
+                <button class="btn btn-secondary btn-sm" id="repoNext" ${repoPage >= totalPages ? 'disabled' : ''}>Próxima ${icon('chevron-right', 14)}</button>
+            </div>` : ''}
+        </div>`;
+
+        if ($('repoSearch')) $('repoSearch').addEventListener('input', () => { repoPage = 1; renderReposList(); });
+        if ($('repoFilterPlatform')) $('repoFilterPlatform').addEventListener('change', () => { repoPage = 1; renderReposList(); });
+        if ($('repoPrev')) $('repoPrev').addEventListener('click', () => { repoPage--; renderReposList(); });
+        if ($('repoNext')) $('repoNext').addEventListener('click', () => { repoPage++; renderReposList(); });
+
+        c.querySelectorAll('[data-sync]').forEach(b => b.addEventListener('click', async () => {
+            b.disabled = true; try { await api('POST', `/orgs/${ORG_ID}/repos/${b.dataset.sync}/sync`); toast('Sync iniciada!'); } catch (e) { toast(e.message || 'Erro', 'error'); } b.disabled = false;
+        }));
+        c.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', async () => {
+            if (!confirm('Remover este repositório e todos os seus dados?')) return;
+            try { await api('DELETE', `/orgs/${ORG_ID}/repos/${b.dataset.del}`); toast('Removido!'); loadRepos(); } catch (e) { toast(e.message || 'Erro', 'error'); }
+        }));
+        if (window.lucide) lucide.createIcons();
     }
 
     function openAddRepoModal() {
@@ -580,6 +629,88 @@
                 await api('POST', `/orgs/${ORG_ID}/repos`, { platform: $('fPlatform').value, full_name: $('fFullName').value, access_token: $('fToken').value, default_branch: $('fBranch').value });
                 toast('Repositório adicionado!'); closeActionModal(); if (currentPage === 'repositories') loadRepos();
             } catch (e) { $('fResult').innerHTML = `<div class="form-error">✗ ${e.message || e.detail || JSON.stringify(e)}</div>`; btn.disabled = false; btn.textContent = 'Adicionar'; }
+        });
+    }
+
+    function openBulkReposModal() {
+        openActionModal('Adicionar Vários Repositórios', `
+            <div class="form-card">
+                <div style="margin-bottom:16px;padding:14px 18px;background:var(--bg-tertiary);border-radius:10px;font-size:0.88rem;color:var(--text-secondary);display:flex;gap:10px;align-items:flex-start">
+                    <span style="color:var(--accent-primary);flex-shrink:0;margin-top:2px">${icon('info', 18)}</span>
+                    <div>Insira um único <strong>Access Token</strong> e cole a lista de repositórios. Todos serão adicionados com o mesmo token — sem repetir configuração.</div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 2fr;gap:12px;align-items:end">
+                    ${formRow('Plataforma', '', '<select class="input" id="fBulkPlatform"><option value="github">GitHub</option><option value="gitlab">GitLab</option></select>')}
+                    ${formRow('Branch', '', '<input class="input" id="fBulkBranch" value="main">')}
+                </div>
+                ${formRow('Access Token', 'Token único para todos os repos abaixo', '<input class="input" id="fBulkToken" type="password" placeholder="ghp_... ou glpat-..." style="font-family:monospace">')}
+                <div class="form-row">
+                    <label class="form-label">Repositórios</label>
+                    <span class="form-hint">Cole a lista — um por linha ou separados por vírgula</span>
+                    <div id="bulkRepoDropZone" style="border:2px dashed var(--border-accent);border-radius:var(--radius-md);padding:12px;cursor:pointer;transition:all 0.2s;background:var(--bg-tertiary)">
+                        <textarea class="input" id="fBulkRepoList" rows="5" placeholder="owner/repo-1&#10;owner/repo-2&#10;owner/repo-3" style="resize:vertical;font-family:monospace;font-size:0.88rem;border:none;background:transparent;width:100%"></textarea>
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding-top:8px;border-top:1px solid var(--border-color)">
+                            <span style="font-size:0.78rem;color:var(--text-tertiary)" id="bulkRepoCount">0 repositórios</span>
+                            <label style="font-size:0.78rem;color:var(--accent-primary);cursor:pointer;display:flex;align-items:center;gap:4px">
+                                ${icon('file-text', 14)} Importar .txt
+                                <input type="file" id="bulkRepoFile" accept=".txt,.csv" style="display:none">
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-actions" style="margin-top:16px">
+                    <button class="btn btn-secondary" onclick="document.getElementById('actionModalClose').click()">Cancelar</button>
+                    <button class="btn btn-primary" id="fBulkRepoSubmit">${icon('layers')} Adicionar Todos</button>
+                </div>
+                <div id="fBulkRepoResult" style="max-height:200px;overflow-y:auto"></div>
+            </div>`);
+
+        const repoList = $('fBulkRepoList');
+        const countEl = $('bulkRepoCount');
+        function updateCount() {
+            const lines = repoList.value.split(/[\r\n,]+/).map(l => l.trim()).filter(l => l && l.includes('/'));
+            countEl.textContent = lines.length + ' repositório' + (lines.length !== 1 ? 's' : '');
+        }
+        repoList.addEventListener('input', updateCount);
+
+        $('bulkRepoFile').addEventListener('change', function() {
+            if (!this.files.length) return;
+            const reader = new FileReader();
+            reader.onload = e => { repoList.value = e.target.result; updateCount(); toast('Lista importada!'); };
+            reader.readAsText(this.files[0]);
+        });
+
+        $('fBulkRepoSubmit').addEventListener('click', async () => {
+            const btn = $('fBulkRepoSubmit');
+            const token = $('fBulkToken').value.trim();
+            const platform = $('fBulkPlatform').value;
+            const branch = $('fBulkBranch').value.trim() || 'main';
+            const lines = repoList.value.split(/[\r\n,]+/).map(l => l.trim()).filter(l => l && l.includes('/'));
+
+            if (!token) { $('fBulkRepoResult').innerHTML = '<div class="form-error">Insira o Access Token</div>'; return; }
+            if (!lines.length) { $('fBulkRepoResult').innerHTML = '<div class="form-error">Insira pelo menos um repositório (owner/repo)</div>'; return; }
+
+            btn.disabled = true; btn.innerHTML = icon('loader', 16) + ' Adicionando ' + lines.length + '...';
+            let ok = 0, fail = 0;
+            const results = [];
+
+            for (const repo of lines) {
+                try {
+                    await ensureAuth();
+                    await api('POST', '/orgs/' + ORG_ID + '/repos', { platform, full_name: repo, access_token: token, default_branch: branch });
+                    ok++;
+                    results.push('<div style="color:var(--accent-success);font-size:0.85rem;display:flex;align-items:center;gap:6px">' + icon('check-circle', 14) + ' ' + esc(repo) + '</div>');
+                } catch (e) {
+                    fail++;
+                    results.push('<div style="color:var(--accent-danger);font-size:0.85rem;display:flex;align-items:center;gap:6px">' + icon('x-circle', 14) + ' ' + esc(repo) + ' — ' + esc(e.message || 'erro') + '</div>');
+                }
+                $('fBulkRepoResult').innerHTML = '<div style="margin-top:12px;display:flex;flex-direction:column;gap:4px">' + results.join('') + '</div>';
+            }
+
+            $('fBulkRepoResult').innerHTML += '<div style="margin-top:12px;padding:12px;background:var(--bg-tertiary);border-radius:8px;font-weight:600;color:var(--text-primary);text-align:center">' + icon('check', 16) + ' ' + ok + ' adicionado(s)' + (fail ? ' · ' + fail + ' falha(s)' : '') + '</div>';
+            btn.disabled = false; btn.innerHTML = icon('layers') + ' Adicionar Todos';
+            if (ok > 0) { toast(ok + ' repositório(s) adicionado(s)!'); loadRepos(); }
+            if (window.lucide) lucide.createIcons();
         });
     }
 
@@ -1009,8 +1140,15 @@
     //  MERGE REQUESTS
     // ================================================================
     async function renderMergeRequests(q) {
-        pageContent.innerHTML = `<h1 class="page-title">Merge Requests</h1><p class="page-subtitle">Todos os merge requests com análise detalhada da IA</p>
+        pageContent.innerHTML = `
+            <div class="page-header-row">
+                <div><h1 class="page-title">Merge Requests</h1><p class="page-subtitle">Todos os merge requests com análise detalhada da IA</p></div>
+                <div class="page-actions">
+                    <button class="btn btn-primary" id="btnBulkAnalysis">${icon('sparkles')} Análise Rápida</button>
+                </div>
+            </div>
             <div class="card"><div class="card-header"><span class="card-title">Todos os MRs</span><span class="card-badge" id="mrPageCount">...</span></div><div class="mr-table-container" id="mrPageTable">${showLoading()}</div></div>`;
+        if ($('btnBulkAnalysis')) $('btnBulkAnalysis').addEventListener('click', openBulkAddModal);
 
         try {
             const mrs = await loadAllMRs();
@@ -1585,7 +1723,14 @@
                 <div class="card-body" style="padding:24px">
                     ${formRow('Título', 'Descreva brevemente o que foi alterado', '<input class="input" id="upTitle" placeholder="Ex: Refatorar módulo de pagamentos">')}
                     ${formRow('Descrição', 'Opcional', '<textarea class="input" id="upDesc" rows="2" placeholder="Detalhes adicionais..." style="resize:vertical"></textarea>')}
-                    ${formRow('Arquivo', '.patch, .diff, .txt ou .zip', '<input type="file" id="upFile" accept=".patch,.diff,.txt,.zip" class="input">')}
+                    <div class="form-row"><label class="form-label">Arquivo</label><span class="form-hint">.py, .js, .ts, .java, .go, .zip, .patch — arraste ou clique</span>
+                    <div id="upDropZone" style="border:2px dashed var(--border-accent);border-radius:var(--radius-md);padding:32px;text-align:center;cursor:pointer;transition:all 0.2s;background:var(--bg-tertiary)">
+                        <div style="margin-bottom:8px">${icon('upload-cloud', 36)}</div>
+                        <div style="font-weight:600;color:var(--text-primary);font-size:0.95rem">Arraste seu arquivo aqui</div>
+                        <div style="color:var(--text-tertiary);font-size:0.82rem;margin-top:4px">ou clique para selecionar</div>
+                        <input type="file" id="upFile" accept=".py,.js,.ts,.tsx,.jsx,.java,.go,.rs,.rb,.php,.c,.cpp,.h,.cs,.swift,.kt,.patch,.diff,.txt,.zip,.json,.yaml,.yml,.html,.css,.sql,.sh" style="display:none">
+                        <div id="upFileName" style="display:none;margin-top:10px;font-size:0.88rem;color:var(--accent-success);font-weight:600"></div>
+                    </div></div>
                     <div style="text-align:center;color:var(--text-tertiary);margin:12px 0;font-weight:600">— OU —</div>
                     ${formRow('Diff inline', 'Cole o diff diretamente aqui', '<textarea class="input" id="upDiff" rows="8" style="width:100%;font-family:JetBrains Mono,monospace;font-size:0.82rem;resize:vertical" placeholder="diff --git a/file.py b/file.py\n--- a/file.py\n+++ b/file.py\n@@ -1,3 +1,4 @@\n+import os\n ..."></textarea>')}
                     <div style="margin-top:16px;display:flex;gap:12px;align-items:center">
@@ -1615,6 +1760,19 @@
             <div id="upResult" style="margin-top:16px"></div>`;
 
         $('upSubmit').addEventListener('click', handleUploadSubmit);
+
+        const upDrop = $('upDropZone'), upFileIn = $('upFile');
+        upDrop.addEventListener('click', () => upFileIn.click());
+        upDrop.addEventListener('dragover', e => { e.preventDefault(); upDrop.style.borderColor = 'var(--accent-success)'; upDrop.style.background = 'rgba(52,211,153,0.05)'; });
+        upDrop.addEventListener('dragleave', () => { upDrop.style.borderColor = 'var(--border-accent)'; upDrop.style.background = 'var(--bg-tertiary)'; });
+        upDrop.addEventListener('drop', e => { e.preventDefault(); upDrop.style.borderColor = 'var(--border-accent)'; upDrop.style.background = 'var(--bg-tertiary)'; if (e.dataTransfer.files.length) { upFileIn.files = e.dataTransfer.files; showUpFileName(e.dataTransfer.files[0].name); } });
+        upFileIn.addEventListener('change', () => { if (upFileIn.files.length) showUpFileName(upFileIn.files[0].name); });
+
+        function showUpFileName(name) {
+            const el = $('upFileName');
+            el.style.display = 'block';
+            el.innerHTML = icon('check-circle', 14) + ' ' + esc(name);
+        }
     }
 
     async function handleUploadSubmit() {

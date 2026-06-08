@@ -50,6 +50,38 @@ class GitHubService:
     def _client(self) -> httpx.AsyncClient:
         return httpx.AsyncClient(headers=self._headers, timeout=30.0)
 
+    async def list_user_repos(self) -> list[dict]:
+        """Fetch all repositories accessible by the authenticated user."""
+        all_repos = []
+        page = 1
+        async with self._client() as client:
+            while True:
+                resp = await client.get(
+                    f"{GITHUB_API}/user/repos",
+                    params={"per_page": 100, "sort": "updated", "page": page},
+                )
+                if resp.status_code == 401:
+                    raise GitPlatformError("github", "Token inválido")
+                if not resp.is_success:
+                    raise GitPlatformError("github", f"Erro ao buscar repos: {resp.status_code}")
+                repos = resp.json()
+                if not repos:
+                    break
+                for r in repos:
+                    all_repos.append({
+                        "full_name": r["full_name"],
+                        "description": r.get("description") or "",
+                        "language": r.get("language") or "",
+                        "private": r.get("private", False),
+                        "default_branch": r.get("default_branch", "main"),
+                        "stars": r.get("stargazers_count", 0),
+                        "updated_at": r.get("updated_at", ""),
+                    })
+                if len(repos) < 100:
+                    break
+                page += 1
+        return all_repos
+
     async def validate_token(self, full_name: str) -> dict:
         """
         Validate access token and return basic repo info.

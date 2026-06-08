@@ -139,6 +139,29 @@ async def bulk_add_repositories(
     return RepositoryBulkResult(succeeded=succeeded, failed=failed)
 
 
+@router.get("/available")
+async def list_available_repos(
+    org_id: UUID,
+    platform: str = Query("github"),
+    token: str = Query(...),
+    current_user: dict = Depends(require_admin),
+):
+    """Fetch all repos accessible by the provided token from GitHub/GitLab."""
+    git_svc = get_git_service(platform, token)
+    repos = await git_svc.list_user_repos()
+
+    db = await get_supabase()
+    existing = (
+        await db.table("repositories")
+        .select("full_name")
+        .eq("org_id", str(org_id))
+        .execute()
+    )
+    already_added = [r["full_name"] for r in (existing.data or [])]
+
+    return {"repos": repos, "already_added": already_added}
+
+
 @router.get("", response_model=list[RepositoryOut])
 async def list_repositories(
     org_id: UUID,

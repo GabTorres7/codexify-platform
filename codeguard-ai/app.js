@@ -235,10 +235,8 @@
         const s = size || 18;
         return `<i data-lucide="${name}" style="width:${s}px;height:${s}px;display:inline-block;vertical-align:middle"></i>`;
     }
-    function refreshIcons() { if (window.lucide) setTimeout(() => lucide.createIcons(), 50); }
-
-    // Auto-refresh Lucide icons when DOM changes
-    new MutationObserver(() => refreshIcons()).observe(document.body, { childList: true, subtree: true });
+    let _iconTimer = null;
+    function refreshIcons() { if (!window.lucide) return; clearTimeout(_iconTimer); _iconTimer = setTimeout(() => lucide.createIcons(), 100); }
 
     function formRow(label, desc, inputHtml) {
         return `<div class="form-row"><div class="form-row-info"><h4>${label}</h4>${desc ? '<p>' + desc + '</p>' : ''}</div><div class="form-row-input">${inputHtml}</div></div>`;
@@ -274,59 +272,174 @@
     // ================================================================
     //  DASHBOARD
     // ================================================================
+    let dashMRs = [];
+    let dashPage = 1;
+    const DASH_PER_PAGE = 10;
+
     async function renderDashboard(q) {
+        const today = new Date().toISOString().slice(0, 10);
+        const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+
         pageContent.innerHTML = `
-            <h1 class="page-title">Dashboard</h1>
-            <p class="page-subtitle">Visão geral das análises de merge requests — Codexify AI</p>
-            <div style="display:flex;gap:10px;margin-bottom:20px"><button class="export-btn" id="exportCsvBtn">${icon('download')} Exportar CSV</button></div>
-            <div class="metrics-grid" id="metricsGrid">
+            <div class="page-header-row">
+                <div>
+                    <h1 class="page-title">Dashboard</h1>
+                    <p class="page-subtitle">Visão geral das análises de merge requests — Codexify AI</p>
+                </div>
+                <div class="page-actions" style="display:flex;gap:8px;align-items:center">
+                    <div style="position:relative;display:flex;align-items:center">
+                        <span style="position:absolute;left:10px;color:var(--text-tertiary);pointer-events:none">${icon('search', 15)}</span>
+                        <input class="input" id="dashSearch" type="text" placeholder="Buscar..." value="${q ? esc(q) : ''}" style="padding-left:34px;width:180px;height:36px;font-size:0.85rem">
+                    </div>
+                    <button class="btn btn-secondary" id="dashFilterToggle" style="position:relative">${icon('sliders-horizontal', 16)} Filtros</button>
+                    <button class="btn btn-secondary" id="exportCsvBtn">${icon('download', 16)} CSV</button>
+                </div>
+            </div>
+
+            <!-- Filtros dropdown -->
+            <div class="dash-filter-panel" id="dashFilterPanel">
+                <!-- Presets -->
+                <div class="filter-presets">
+                    <button class="filter-preset-btn active" data-preset="7d">${icon('zap', 13)} 7 dias</button>
+                    <button class="filter-preset-btn" data-preset="30d">${icon('calendar', 13)} 30 dias</button>
+                    <button class="filter-preset-btn" data-preset="critical">${icon('alert-triangle', 13)} Críticos</button>
+                    <button class="filter-preset-btn" data-preset="approved">${icon('check-circle', 13)} Aprovados</button>
+                </div>
+                <!-- Row 1: Datas -->
+                <div class="filter-row">
+                    <div class="filter-input-wrap">
+                        <span class="filter-input-icon">${icon('calendar', 14)}</span>
+                        <input class="input filter-input" id="dashDateFrom" type="date" value="${weekAgo}">
+                        <span class="filter-input-hint">De</span>
+                    </div>
+                    <div class="filter-input-wrap">
+                        <span class="filter-input-icon">${icon('calendar', 14)}</span>
+                        <input class="input filter-input" id="dashDateTo" type="date" value="${today}">
+                        <span class="filter-input-hint">Até</span>
+                    </div>
+                </div>
+                <!-- Row 2: Dropdowns -->
+                <div class="filter-row">
+                    <div class="filter-input-wrap">
+                        <span class="filter-input-icon">${icon('activity', 14)}</span>
+                        <select class="input filter-input" id="dashFilterStatus">
+                            <option value="all">Status: Todos</option>
+                            <option value="approved">Aprovado</option>
+                            <option value="pending">Pendente</option>
+                            <option value="issues">Issues</option>
+                            <option value="analyzing">Analisando</option>
+                            <option value="merged">Merged</option>
+                        </select>
+                    </div>
+                    <div class="filter-input-wrap">
+                        <span class="filter-input-icon">${icon('star', 14)}</span>
+                        <select class="input filter-input" id="dashFilterScore">
+                            <option value="all">Score: Todos</option>
+                            <option value="high">65+ Verde</option>
+                            <option value="medium">50-64 Amarelo</option>
+                            <option value="low">0-49 Vermelho</option>
+                        </select>
+                    </div>
+                    <div class="filter-input-wrap">
+                        <span class="filter-input-icon">${icon('user', 14)}</span>
+                        <select class="input filter-input" id="dashFilterAuthor">
+                            <option value="all">Autor: Todos</option>
+                        </select>
+                    </div>
+                </div>
+                <!-- Actions -->
+                <div class="filter-actions">
+                    <button class="btn btn-ghost btn-sm" id="dashClearFilter">${icon('x', 14)} Limpar</button>
+                    <button class="btn btn-primary btn-sm" id="dashApplyFilter">${icon('check', 14)} Aplicar Filtros</button>
+                </div>
+            </div>
+            <!-- Chips de filtros ativos -->
+            <div id="dashFilterChips" class="filter-chips"></div>
+
+            <!-- Metrics -->
+            <div class="metrics-grid" id="metricsGrid" style="margin-top:16px">
                 ${metricCard('purple', icon('clock', 20), '...', 'MRs Pendentes', '', 0)}
                 ${metricCard('green', icon('check-circle', 20), '...', 'Aprovados / Merged', '', 0.1)}
                 ${metricCard('red', icon('alert-triangle', 20), '...', 'Com Problemas', '', 0.2)}
                 ${metricCard('yellow', icon('star', 20), '...', 'Score Médio IA', '', 0.3)}
             </div>
 
-            <!-- Quick Actions -->
-            <div class="quick-actions stagger-in" style="animation-delay:0.32s">
-                <button class="quick-action-btn" id="qaBtnAddRepo">
-                    <div class="qa-icon icon-bounce">${icon('folder-git-2', 24)}</div>
-                    <div><strong>Adicionar Repositório</strong><span>Conectar GitHub ou GitLab</span></div>
+            <!-- Quick Actions (acima dos gráficos) -->
+            <div class="qa-row stagger-in" style="animation-delay:0.25s">
+                <button class="qa-card" id="qaBtnAddRepo">
+                    <div class="qa-card-icon" style="background:rgba(129,140,248,0.1);color:#818cf8">${icon('folder-git-2', 20)}</div>
+                    <span>Adicionar Repo</span>
                 </button>
-                <button class="quick-action-btn" id="qaBtnInvite">
-                    <div class="qa-icon icon-bounce">${icon('user-plus', 24)}</div>
-                    <div><strong>Convidar Membro</strong><span>Adicionar alguém à equipe</span></div>
+                <button class="qa-card" id="qaBtnInvite">
+                    <div class="qa-card-icon" style="background:rgba(52,211,153,0.1);color:var(--accent-success)">${icon('user-plus', 20)}</div>
+                    <span>Convidar Membro</span>
                 </button>
-                <button class="quick-action-btn" id="qaBtnBulk">
-                    <div class="qa-icon icon-bounce">${icon('sparkles', 24)}</div>
-                    <div><strong>Análise Rápida</strong><span>Enviar arquivos para análise</span></div>
+                <button class="qa-card" id="qaBtnBulk">
+                    <div class="qa-card-icon" style="background:rgba(251,191,36,0.1);color:var(--accent-warning)">${icon('sparkles', 20)}</div>
+                    <span>Análise Rápida</span>
+                </button>
+                <button class="qa-card" id="qaBtnExport">
+                    <div class="qa-card-icon" style="background:rgba(248,113,113,0.1);color:var(--accent-danger)">${icon('download', 20)}</div>
+                    <span>Exportar CSV</span>
                 </button>
             </div>
 
-            <div class="dashboard-grid">
-                <div class="card stagger-in" style="animation-delay:0.35s">
-                    <div class="card-header"><span class="card-title">Atividade Semanal</span><span class="card-badge">Últimos 7 dias</span></div>
-                    <div class="card-body"><div class="chart-container" id="chartContainer">Carregando...</div></div>
+            <!-- Atividade + Score + Atividade Recente -->
+            <div class="dash-bottom-grid">
+                <div class="card stagger-in" style="animation-delay:0.3s">
+                    <div class="card-header">
+                        <span class="card-title">${icon('bar-chart-2', 16)} Atividade</span>
+                        <span class="card-badge" id="chartPeriodLabel">Últimos 7 dias</span>
+                    </div>
+                    <div class="card-body" style="padding:16px">
+                        <div class="chart-container" id="chartContainer">Carregando...</div>
+                        <div id="scoreDistChart" style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border-color)">Carregando...</div>
+                    </div>
                 </div>
-                <div class="card stagger-in" style="animation-delay:0.45s">
-                    <div class="card-header"><span class="card-title">Atividade Recente</span></div>
-                    <div class="card-body"><div class="activity-list" id="activityList">Carregando...</div></div>
+                <div class="card stagger-in" style="animation-delay:0.35s">
+                    <div class="card-header"><span class="card-title">${icon('activity', 16)} Atividade Recente</span></div>
+                    <div class="card-body" style="padding:0;max-height:320px;overflow-y:auto"><div class="activity-list" id="activityList">Carregando...</div></div>
                 </div>
             </div>
-            <div class="card stagger-in" style="animation-delay:0.55s">
-                <div class="card-header"><span class="card-title">Merge Requests Recentes</span><span class="card-badge" id="mrCountBadge">...</span></div>
+
+            <!-- MR Table -->
+            <div class="card stagger-in" style="animation-delay:0.5s">
+                <div class="card-header"><span class="card-title">${icon('git-pull-request', 16)} Merge Requests</span><span class="card-badge" id="mrCountBadge">...</span></div>
                 <div class="mr-table-container" id="mrTableContainer">Carregando...</div>
+                <div id="dashPagination"></div>
             </div>`;
 
         $('qaBtnAddRepo').addEventListener('click', openAddRepoModal);
         $('qaBtnInvite').addEventListener('click', openInviteMemberModal);
         $('qaBtnBulk').addEventListener('click', () => { document.querySelector('[data-page="merge-requests"]').click(); setTimeout(openBulkAddModal, 300); });
-        $('exportCsvBtn').addEventListener('click', () => {
-            const mrs = cachedMRs.map(normalizeMR);
-            AnalysisEngine.exportCSV(mrs);
-            toast('CSV exportado com sucesso!');
-        });
+        $('qaBtnExport').addEventListener('click', () => { const mrs = cachedMRs.map(normalizeMR); AnalysisEngine.exportCSV(mrs); toast('CSV exportado!'); });
+        $('exportCsvBtn').addEventListener('click', () => { const mrs = cachedMRs.map(normalizeMR); AnalysisEngine.exportCSV(mrs); toast('CSV exportado!'); });
 
-        // Load real data
+        // Filter toggle
+        $('dashFilterToggle').addEventListener('click', () => {
+            $('dashFilterPanel').classList.toggle('open');
+        });
+        $('dashSearch').addEventListener('input', () => { dashPage = 1; renderDashMRs(); });
+        $('dashApplyFilter').addEventListener('click', () => { dashFiltersChanged = true; dashPage = 1; renderDashMRs(); $('dashFilterPanel').classList.remove('open'); renderDashChips(); });
+        $('dashClearFilter').addEventListener('click', () => {
+            $('dashDateFrom').value = weekAgo; $('dashDateTo').value = today;
+            $('dashFilterStatus').value = 'all'; $('dashFilterScore').value = 'all'; $('dashFilterAuthor').value = 'all';
+            dashFiltersChanged = false; dashPage = 1; renderDashMRs(); renderDashChips(); reloadApiChart();
+            document.querySelectorAll('.filter-preset-btn').forEach(b => b.classList.remove('active'));
+        });
+        // Presets
+        document.querySelectorAll('.filter-preset-btn').forEach(btn => btn.addEventListener('click', () => {
+            document.querySelectorAll('.filter-preset-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const p = btn.dataset.preset;
+            const now = new Date(), fmt = d => d.toISOString().slice(0,10);
+            if (p === '7d') { $('dashDateFrom').value = fmt(new Date(now - 7*86400000)); $('dashDateTo').value = fmt(now); $('dashFilterStatus').value = 'all'; $('dashFilterScore').value = 'all'; }
+            else if (p === '30d') { $('dashDateFrom').value = fmt(new Date(now - 30*86400000)); $('dashDateTo').value = fmt(now); $('dashFilterStatus').value = 'all'; $('dashFilterScore').value = 'all'; }
+            else if (p === 'critical') { $('dashFilterScore').value = 'low'; $('dashFilterStatus').value = 'all'; }
+            else if (p === 'approved') { $('dashFilterStatus').value = 'approved'; $('dashFilterScore').value = 'all'; }
+            dashFiltersChanged = true; dashPage = 1; renderDashMRs(); renderDashChips();
+        }));
+
         await ensureAuth();
 
         // Metrics
@@ -339,7 +452,6 @@
                 ${metricCard('yellow', icon('star', 20), metrics.avg_score + '<span style="font-size:1rem;color:var(--text-tertiary)">/100</span>', 'Score Médio IA', '', 0.3)}
             `;
         } catch (_) {
-            // Fallback to mock
             if (typeof MERGE_REQUESTS !== 'undefined') {
                 const metrics = AnalysisEngine.getMetrics(MERGE_REQUESTS);
                 $('metricsGrid').innerHTML = `
@@ -351,20 +463,16 @@
             }
         }
 
-        // Chart
+        // Chart from API (initial load)
         try {
             const chartData = await api('GET', `/orgs/${ORG_ID}/dashboard/chart`);
             if (chartData && chartData.length) {
                 const max = Math.max(...chartData.map(d => d.opened || d.value || 1));
-                $('chartContainer').innerHTML = chartData.map(d => `<div class="chart-bar-group"><div class="chart-bar" style="height:${((d.opened || d.value || 0)/Math.max(max,1))*170}px" data-value="${d.opened || d.value || 0}"></div><span class="chart-label">${d.day || d.label}</span></div>`).join('');
-            } else {
-                $('chartContainer').innerHTML = '<div style="padding:20px;color:var(--text-tertiary)">Nenhuma atividade esta semana</div>';
+                const dayPt = {Mon:'Seg',Tue:'Ter',Wed:'Qua',Thu:'Qui',Fri:'Sex',Sat:'Sáb',Sun:'Dom'};
+                const dayFull = {Mon:'Segunda',Tue:'Terça',Wed:'Quarta',Thu:'Quinta',Fri:'Sexta',Sat:'Sábado',Sun:'Domingo'};
+                $('chartContainer').innerHTML = chartData.map(d => { const lbl = d.day || d.label; const val = d.opened || d.value || 0; return `<div class="chart-bar-group"><div class="chart-bar" style="height:${(val/Math.max(max,1))*150}px"></div><div class="chart-bar-tooltip"><span class="tt-day">${dayFull[lbl] || lbl}</span><br>${val} MR${val !== 1 ? 's' : ''}</div><span class="chart-label">${dayPt[lbl] || lbl}</span></div>`; }).join('');
             }
-        } catch (_) {
-            if (typeof CHART_DATA !== 'undefined') {
-                $('chartContainer').innerHTML = CHART_DATA.map(d => `<div class="chart-bar-group"><div class="chart-bar" style="height:${(d.value/24)*170}px" data-value="${d.value}"></div><span class="chart-label">${d.label}</span></div>`).join('');
-            }
-        }
+        } catch (_) {}
 
         // Activity
         try {
@@ -384,26 +492,237 @@
             }
         }
 
-        // MR Table
+        // MR Table with filters
         try {
             const mrs = await loadAllMRs();
-            const normalized = mrs.map(normalizeMR);
-            const filtered = q ? normalized.filter(m => m.title.toLowerCase().includes(q) || m.branch.toLowerCase().includes(q)) : normalized;
-            $('mrCountBadge').textContent = filtered.length + ' total';
-            $('mrTableContainer').innerHTML = renderMRTable(filtered);
-            attachTableListeners();
+            dashMRs = mrs.map(normalizeMR);
         } catch (_) {
-            if (typeof MERGE_REQUESTS !== 'undefined') {
-                const mrs = q ? MERGE_REQUESTS.filter(m => m.title.toLowerCase().includes(q) || m.branch.toLowerCase().includes(q)) : MERGE_REQUESTS;
-                $('mrCountBadge').textContent = mrs.length + ' total';
-                $('mrTableContainer').innerHTML = renderMRTable(mrs);
-                attachTableListeners();
+            dashMRs = typeof MERGE_REQUESTS !== 'undefined' ? MERGE_REQUESTS : [];
+        }
+
+        // Populate author filter
+        const dashAuthors = [...new Set(dashMRs.map(m => m.author.name))].sort();
+        const dashAuthorSel = $('dashFilterAuthor');
+        dashAuthors.forEach(a => { const o = document.createElement('option'); o.value = a; o.textContent = a; dashAuthorSel.appendChild(o); });
+
+        dashPage = 1;
+        renderDashMRs();
+
+        refreshIcons();
+    }
+
+    function renderDashChips() {
+        const chips = [];
+        const s = $('dashFilterStatus'); if (s && s.value !== 'all') chips.push({ label: 'Status: ' + s.options[s.selectedIndex].text, clear: () => { s.value = 'all'; } });
+        const sc = $('dashFilterScore'); if (sc && sc.value !== 'all') chips.push({ label: 'Score: ' + sc.options[sc.selectedIndex].text, clear: () => { sc.value = 'all'; } });
+        const au = $('dashFilterAuthor'); if (au && au.value !== 'all') chips.push({ label: 'Autor: ' + au.value, clear: () => { au.value = 'all'; } });
+        const el = $('dashFilterChips');
+        if (!el) return;
+        if (!chips.length) { el.innerHTML = ''; return; }
+        el.innerHTML = chips.map((c, i) => `<span class="filter-chip">${esc(c.label)} <button data-chip="${i}">${icon('x', 12)}</button></span>`).join('');
+        el.querySelectorAll('[data-chip]').forEach(btn => btn.addEventListener('click', () => {
+            chips[+btn.dataset.chip].clear();
+            dashPage = 1; renderDashMRs(); renderDashChips();
+        }));
+    }
+
+    function renderDashMRs() {
+        const q = ($('dashSearch') ? $('dashSearch').value : '').toLowerCase();
+        const dateFrom = $('dashDateFrom') ? $('dashDateFrom').value : '';
+        const dateTo = $('dashDateTo') ? $('dashDateTo').value : '';
+        const status = $('dashFilterStatus') ? $('dashFilterStatus').value : 'all';
+        const score = $('dashFilterScore') ? $('dashFilterScore').value : 'all';
+        const author = $('dashFilterAuthor') ? $('dashFilterAuthor').value : 'all';
+
+        let filtered = dashMRs;
+        if (q) filtered = filtered.filter(m => m.title.toLowerCase().includes(q) || m.branch.toLowerCase().includes(q) || m.author.name.toLowerCase().includes(q));
+        if (dateFrom) filtered = filtered.filter(m => m.createdAt && m.createdAt.slice(0, 10) >= dateFrom);
+        if (dateTo) filtered = filtered.filter(m => m.createdAt && m.createdAt.slice(0, 10) <= dateTo);
+        if (status !== 'all') filtered = filtered.filter(m => m.status === status);
+        if (score === 'high') filtered = filtered.filter(m => m.aiScore !== null && m.aiScore >= 65);
+        else if (score === 'medium') filtered = filtered.filter(m => m.aiScore !== null && m.aiScore >= 50 && m.aiScore < 65);
+        else if (score === 'low') filtered = filtered.filter(m => m.aiScore !== null && m.aiScore < 50);
+        if (author !== 'all') filtered = filtered.filter(m => m.author.name === author);
+
+        const totalPages = Math.max(1, Math.ceil(filtered.length / DASH_PER_PAGE));
+        if (dashPage > totalPages) dashPage = totalPages;
+        const start = (dashPage - 1) * DASH_PER_PAGE;
+        const pageMRs = filtered.slice(start, start + DASH_PER_PAGE);
+
+        // Update metrics from filtered data
+        const pending = filtered.filter(m => m.status === 'pending' || m.status === 'analyzing').length;
+        const approved = filtered.filter(m => m.status === 'approved' || m.status === 'merged').length;
+        const withIssues = filtered.filter(m => m.status === 'issues').length;
+        const scored = filtered.filter(m => m.aiScore !== null && m.aiScore !== undefined);
+        const avgScore = scored.length ? Math.round(scored.reduce((s, m) => s + m.aiScore, 0) / scored.length) : 0;
+
+        $('metricsGrid').innerHTML = `
+            ${metricCard('purple', icon('clock', 20), pending, 'MRs Pendentes', '', 0, 'pending')}
+            ${metricCard('green', icon('check-circle', 20), approved, 'Aprovados / Merged', '', 0, 'approved')}
+            ${metricCard('red', icon('alert-triangle', 20), withIssues, 'Com Problemas', '', 0, 'issues')}
+            ${metricCard('yellow', icon('star', 20), avgScore, 'Score Médio IA', '', 0)}
+        `;
+        animateCounters();
+        bindMetricClicks();
+
+        // Score dist uses filtered data, chart uses ALL MRs with date range for display
+        updateScoreDist(filtered);
+        updateActivityChart(dashMRs, dateFrom, dateTo);
+
+        $('mrCountBadge').textContent = filtered.length + ' resultado' + (filtered.length !== 1 ? 's' : '');
+        $('mrTableContainer').innerHTML = renderMRTable(pageMRs);
+        attachTableListeners();
+
+        $('dashPagination').innerHTML = totalPages > 1 ? `<div class="repo-pagination">
+            <button class="btn btn-secondary btn-sm" id="dashPrev" ${dashPage <= 1 ? 'disabled' : ''}>${icon('chevron-left', 14)} Anterior</button>
+            <span style="color:var(--text-secondary);font-size:0.88rem">Página <strong>${dashPage}</strong> de <strong>${totalPages}</strong></span>
+            <button class="btn btn-secondary btn-sm" id="dashNext" ${dashPage >= totalPages ? 'disabled' : ''}>Próxima ${icon('chevron-right', 14)}</button>
+        </div>` : '';
+
+        if ($('dashPrev')) $('dashPrev').addEventListener('click', () => { dashPage--; renderDashMRs(); });
+        if ($('dashNext')) $('dashNext').addEventListener('click', () => { dashPage++; renderDashMRs(); });
+        refreshIcons();
+    }
+
+    let dashFiltersChanged = false;
+
+    async function reloadApiChart() {
+        try {
+            const chartData = await api('GET', `/orgs/${ORG_ID}/dashboard/chart`);
+            if (chartData && chartData.length && $('chartContainer')) {
+                const max = Math.max(...chartData.map(d => d.opened || d.value || 1));
+                const dayPt = {Mon:'Seg',Tue:'Ter',Wed:'Qua',Thu:'Qui',Fri:'Sex',Sat:'Sáb',Sun:'Dom'};
+                const dayFull = {Mon:'Segunda',Tue:'Terça',Wed:'Quarta',Thu:'Quinta',Fri:'Sexta',Sat:'Sábado',Sun:'Domingo'};
+                $('chartContainer').innerHTML = chartData.map(d => { const lbl = d.day || d.label; const val = d.opened || d.value || 0; return `<div class="chart-bar-group"><div class="chart-bar" style="height:${(val/Math.max(max,1))*150}px"></div><div class="chart-bar-tooltip"><span class="tt-day">${dayFull[lbl] || lbl}</span><br>${val} MR${val !== 1 ? 's' : ''}</div><span class="chart-label">${dayPt[lbl] || lbl}</span></div>`; }).join('');
+                if ($('chartPeriodLabel')) $('chartPeriodLabel').textContent = 'Últimos 7 dias';
             }
+        } catch(_) {}
+    }
+
+    function updateActivityChart(allMrs, dateFrom, dateTo) {
+        const dayPt = {0:'Dom',1:'Seg',2:'Ter',3:'Qua',4:'Qui',5:'Sex',6:'Sáb'};
+        const dayFull = {0:'Domingo',1:'Segunda',2:'Terça',3:'Quarta',4:'Quinta',5:'Sexta',6:'Sábado'};
+
+        // Count MRs per day (from ALL MRs, not filtered)
+        const dayCounts = {};
+        allMrs.forEach(m => {
+            if (!m.createdAt) return;
+            const d = m.createdAt.slice(0, 10);
+            dayCounts[d] = (dayCounts[d] || 0) + 1;
+        });
+
+        // If user set date filters, use those. Otherwise auto-detect from data.
+        let from, to;
+        if (dateFrom && dateTo) {
+            from = new Date(dateFrom);
+            to = new Date(dateTo);
+        } else {
+            // Auto-detect: find min and max dates from MRs
+            const dates = allMrs.filter(m => m.createdAt).map(m => m.createdAt.slice(0, 10)).sort();
+            if (dates.length) {
+                from = new Date(dates[0]);
+                to = new Date(dates[dates.length - 1]);
+                // Extend to today if last MR is older
+                const now = new Date();
+                if (to < now) to = now;
+            } else {
+                from = new Date(Date.now() - 7 * 86400000);
+                to = new Date();
+            }
+        }
+
+        // Build day range
+        const days = [];
+        for (let d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) {
+            const key = d.toISOString().slice(0, 10);
+            days.push({ key, day: d.getDay(), count: dayCounts[key] || 0 });
+        }
+
+        // Show last 14 max
+        const showDays = days.length > 14 ? days.slice(-14) : days;
+        const max = Math.max(...showDays.map(d => d.count), 1);
+
+        // Period label
+        const diffDays = Math.round((to - from) / 86400000);
+        if ($('chartPeriodLabel')) {
+            if (diffDays <= 7) $('chartPeriodLabel').textContent = 'Últimos 7 dias';
+            else if (diffDays <= 30) $('chartPeriodLabel').textContent = 'Últimos ' + diffDays + ' dias';
+            else $('chartPeriodLabel').textContent = showDays[0].key.slice(5).replace('-','/') + ' — ' + showDays[showDays.length-1].key.slice(5).replace('-','/');
+        }
+
+        if ($('chartContainer')) {
+            if (!showDays.some(d => d.count > 0)) {
+                $('chartContainer').innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-tertiary);font-size:0.9rem">Nenhuma atividade no período</div>';
+                return;
+            }
+            $('chartContainer').innerHTML = showDays.map(d => {
+                const h = (d.count / max) * 140;
+                const barH = d.count > 0 ? Math.max(h, 24) : 4;
+                const lbl = showDays.length <= 7 ? dayPt[d.day] : d.key.slice(5).replace('-', '/');
+                return `<div class="chart-bar-group"><div class="chart-bar" style="height:${barH}px" data-value="${d.count}"></div><div class="chart-bar-tooltip"><span class="tt-day">${dayFull[d.day] || d.key}</span><br>${d.count} MR${d.count !== 1 ? 's' : ''}</div><span class="chart-label">${lbl}</span></div>`;
+            }).join('');
         }
     }
 
-    function metricCard(color, icon, value, label, trend, delay) {
-        return `<div class="metric-card stagger-in" style="animation-delay:${delay}s"><div class="metric-card-header"><div class="metric-icon ${color}">${icon}</div>${trend ? `<span class="metric-trend up">${trend}</span>` : ''}</div><div class="metric-value">${value}</div><div class="metric-label">${label}</div></div>`;
+    function updateScoreDist(filtered) {
+        const green = filtered.filter(m => m.aiScore !== null && m.aiScore >= 65).length;
+        const yellow = filtered.filter(m => m.aiScore !== null && m.aiScore >= 50 && m.aiScore < 65).length;
+        const red = filtered.filter(m => m.aiScore !== null && m.aiScore < 50).length;
+        const noScore = filtered.filter(m => m.aiScore === null || m.aiScore === undefined).length;
+        const total = green + yellow + red + noScore || 1;
+
+        if ($('scoreDistChart')) {
+            $('scoreDistChart').innerHTML = `
+                <div class="score-dist">
+                    <div class="score-dist-bar">
+                        <div style="width:${(green/total)*100}%;background:var(--accent-success)" title="${green} aprovados"></div>
+                        <div style="width:${(yellow/total)*100}%;background:var(--accent-warning)" title="${yellow} regulares"></div>
+                        <div style="width:${(red/total)*100}%;background:var(--accent-danger)" title="${red} críticos"></div>
+                        <div style="width:${(noScore/total)*100}%;background:var(--bg-tertiary)" title="${noScore} sem score"></div>
+                    </div>
+                    <div class="score-dist-legend">
+                        <span><span class="dot" style="background:var(--accent-success)"></span> ${green} Bom (65+)</span>
+                        <span><span class="dot" style="background:var(--accent-warning)"></span> ${yellow} Regular (50-64)</span>
+                        <span><span class="dot" style="background:var(--accent-danger)"></span> ${red} Crítico (&lt;50)</span>
+                        ${noScore ? `<span><span class="dot" style="background:var(--text-tertiary)"></span> ${noScore} Analisando</span>` : ''}
+                    </div>
+                </div>`;
+        }
+    }
+
+    function metricCard(color, iconHtml, value, label, trend, delay, filterAction) {
+        const clickAttr = filterAction ? `data-metric-filter="${filterAction}" style="animation-delay:${delay}s;cursor:pointer"` : `style="animation-delay:${delay}s"`;
+        return `<div class="metric-card stagger-in" ${clickAttr}><div class="metric-card-header"><div class="metric-icon ${color}">${iconHtml}</div>${trend ? `<span class="metric-trend up">${trend}</span>` : ''}</div><div class="metric-value" data-count-to="${typeof value === 'number' ? value : ''}">${value}</div><div class="metric-label">${label}</div></div>`;
+    }
+
+    function animateCounters() {
+        document.querySelectorAll('[data-count-to]').forEach(el => {
+            const target = parseInt(el.dataset.countTo);
+            if (isNaN(target) || target === 0) return;
+            const duration = 800;
+            const start = performance.now();
+            el.textContent = '0';
+            function step(now) {
+                const pct = Math.min((now - start) / duration, 1);
+                const ease = 1 - Math.pow(1 - pct, 3);
+                el.textContent = Math.round(target * ease);
+                if (pct < 1) requestAnimationFrame(step);
+            }
+            requestAnimationFrame(step);
+        });
+    }
+
+    function bindMetricClicks() {
+        document.querySelectorAll('[data-metric-filter]').forEach(card => {
+            card.addEventListener('click', () => {
+                const action = card.dataset.metricFilter;
+                $('dashFilterPanel').classList.add('open');
+                if (action === 'pending') $('dashFilterStatus').value = 'pending';
+                else if (action === 'approved') $('dashFilterStatus').value = 'approved';
+                else if (action === 'issues') $('dashFilterStatus').value = 'issues';
+                dashPage = 1; renderDashMRs(); renderDashChips();
+            });
+        });
     }
 
     // ================================================================
@@ -440,6 +759,7 @@
             btn.addEventListener('click', () => {
                 const fullName = btn.dataset.exampleRepo;
                 const platform = btn.dataset.examplePlatform;
+                const exGt = getGlobalToken();
                 openActionModal('Adicionar ' + fullName, `
                     <div class="form-card">
                         <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border-color)">
@@ -449,11 +769,11 @@
                                 <div style="color:var(--text-tertiary);font-size:0.85rem">Repositório publico — ${platform}</div>
                             </div>
                         </div>
-                        <p style="color:var(--text-secondary);font-size:0.88rem;margin-bottom:16px">
+                        ${exGt ? `<div style="margin-bottom:16px;padding:10px 14px;background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.2);border-radius:8px;font-size:0.82rem;color:var(--accent-success);display:flex;gap:8px;align-items:center">${icon('check-circle', 14)} Usando token global das Configurações</div>` : `<p style="color:var(--text-secondary);font-size:0.88rem;margin-bottom:16px">
                             Para analisar PRs deste repo, voce precisa de um <strong>GitHub Personal Access Token</strong>.<br>
                             <a href="https://github.com/settings/tokens/new?scopes=public_repo&description=Codexfy" target="_blank" style="color:var(--accent-primary);font-weight:600">Criar token no GitHub →</a>
                         </p>
-                        ${formRow('Access Token', 'Cole o token aqui', '<input class="input" id="exToken" type="password" placeholder="ghp_xxxxxxxxxxxx">')}
+                        ${formRow('Access Token', 'Cole o token aqui', '<input class="input" id="exToken" type="password" placeholder="ghp_xxxxxxxxxxxx">')}`}
                         <div class="form-actions">
                             <button class="btn btn-secondary" onclick="document.getElementById('actionModalClose').click()">Cancelar</button>
                             <button class="btn btn-primary" id="exSubmit">Adicionar e Sincronizar</button>
@@ -464,7 +784,8 @@
                     const btn2 = $('exSubmit'); btn2.disabled = true; btn2.textContent = 'Adicionando...';
                     try {
                         await ensureAuth();
-                        await api('POST', `/orgs/${ORG_ID}/repos`, { platform, full_name: fullName, access_token: $('exToken').value });
+                        const exTkn = $('exToken') ? $('exToken').value : getGlobalToken();
+                        await api('POST', `/orgs/${ORG_ID}/repos`, { platform, full_name: fullName, access_token: exTkn });
                         toast(fullName + ' adicionado!');
                         closeActionModal();
                         if (currentPage === 'repositories') loadRepos();
@@ -606,15 +927,17 @@
             if (!confirm('Remover este repositório e todos os seus dados?')) return;
             try { await api('DELETE', `/orgs/${ORG_ID}/repos/${b.dataset.del}`); toast('Removido!'); loadRepos(); } catch (e) { toast(e.message || 'Erro', 'error'); }
         }));
-        if (window.lucide) lucide.createIcons();
+        refreshIcons();
     }
 
     function openAddRepoModal() {
+        const gt = getGlobalToken();
         openActionModal('Adicionar Repositório', `
             <div class="form-card">
-                ${formRow('Plataforma', '', '<select class="input" id="fPlatform"><option value="github"><i data-lucide="github" style="width:14px;height:14px;display:inline-block;vertical-align:middle"></i> GitHub</option><option value="gitlab"><i data-lucide="gitlab" style="width:14px;height:14px;display:inline-block;vertical-align:middle"></i> GitLab</option></select>')}
+                ${gt ? `<div style="margin-bottom:12px;padding:10px 14px;background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.2);border-radius:8px;font-size:0.82rem;color:var(--accent-success);display:flex;gap:8px;align-items:center">${icon('check-circle', 14)} Usando token global das Configurações</div>` : ''}
+                ${formRow('Plataforma', '', `<select class="input" id="fPlatform"><option value="github" ${getGlobalPlatform() === 'github' ? 'selected' : ''}>GitHub</option><option value="gitlab" ${getGlobalPlatform() === 'gitlab' ? 'selected' : ''}>GitLab</option></select>`)}
                 ${formRow('Repositório', 'Formato: owner/repo', '<input class="input" id="fFullName" placeholder="empresa/backend-api">')}
-                ${formRow('Access Token', 'Token com permissão de leitura', '<input class="input" id="fToken" type="password" placeholder="ghp_... ou glpat-...">')}
+                ${gt ? '' : formRow('Access Token', 'Token com permissão de leitura', '<input class="input" id="fToken" type="password" placeholder="ghp_... ou glpat-...">')}
                 ${formRow('Branch Principal', '', '<input class="input" id="fBranch" value="main">')}
                 <div class="form-actions">
                     <button class="btn btn-secondary" onclick="document.getElementById('actionModalClose').click()">Cancelar</button>
@@ -626,91 +949,191 @@
             const btn = $('fSubmit'); btn.disabled = true; btn.textContent = 'Adicionando...';
             try {
                 await ensureAuth();
-                await api('POST', `/orgs/${ORG_ID}/repos`, { platform: $('fPlatform').value, full_name: $('fFullName').value, access_token: $('fToken').value, default_branch: $('fBranch').value });
+                const tkn = $('fToken') ? $('fToken').value : getGlobalToken();
+                await api('POST', `/orgs/${ORG_ID}/repos`, { platform: $('fPlatform').value, full_name: $('fFullName').value, access_token: tkn, default_branch: $('fBranch').value });
                 toast('Repositório adicionado!'); closeActionModal(); if (currentPage === 'repositories') loadRepos();
             } catch (e) { $('fResult').innerHTML = `<div class="form-error">✗ ${e.message || e.detail || JSON.stringify(e)}</div>`; btn.disabled = false; btn.textContent = 'Adicionar'; }
         });
     }
 
+    function getGlobalToken() { return localStorage.getItem('cg_git_token') || ''; }
+    function getGlobalPlatform() { return localStorage.getItem('cg_git_platform') || 'github'; }
+
     function openBulkReposModal() {
-        openActionModal('Adicionar Vários Repositórios', `
+        const gt = getGlobalToken();
+        const gp = getGlobalPlatform();
+        let fetchedRepos = [];
+        let alreadyAdded = [];
+        let selected = new Set();
+
+        openActionModal('Importar Repositórios', `
             <div class="form-card">
-                <div style="margin-bottom:16px;padding:14px 18px;background:var(--bg-tertiary);border-radius:10px;font-size:0.88rem;color:var(--text-secondary);display:flex;gap:10px;align-items:flex-start">
-                    <span style="color:var(--accent-primary);flex-shrink:0;margin-top:2px">${icon('info', 18)}</span>
-                    <div>Insira um único <strong>Access Token</strong> e cole a lista de repositórios. Todos serão adicionados com o mesmo token — sem repetir configuração.</div>
-                </div>
-                <div style="display:grid;grid-template-columns:1fr 2fr;gap:12px;align-items:end">
-                    ${formRow('Plataforma', '', '<select class="input" id="fBulkPlatform"><option value="github">GitHub</option><option value="gitlab">GitLab</option></select>')}
-                    ${formRow('Branch', '', '<input class="input" id="fBulkBranch" value="main">')}
-                </div>
-                ${formRow('Access Token', 'Token único para todos os repos abaixo', '<input class="input" id="fBulkToken" type="password" placeholder="ghp_... ou glpat-..." style="font-family:monospace">')}
-                <div class="form-row">
-                    <label class="form-label">Repositórios</label>
-                    <span class="form-hint">Cole a lista — um por linha ou separados por vírgula</span>
-                    <div id="bulkRepoDropZone" style="border:2px dashed var(--border-accent);border-radius:var(--radius-md);padding:12px;cursor:pointer;transition:all 0.2s;background:var(--bg-tertiary)">
-                        <textarea class="input" id="fBulkRepoList" rows="5" placeholder="owner/repo-1&#10;owner/repo-2&#10;owner/repo-3" style="resize:vertical;font-family:monospace;font-size:0.88rem;border:none;background:transparent;width:100%"></textarea>
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding-top:8px;border-top:1px solid var(--border-color)">
-                            <span style="font-size:0.78rem;color:var(--text-tertiary)" id="bulkRepoCount">0 repositórios</span>
-                            <label style="font-size:0.78rem;color:var(--accent-primary);cursor:pointer;display:flex;align-items:center;gap:4px">
-                                ${icon('file-text', 14)} Importar .txt
-                                <input type="file" id="bulkRepoFile" accept=".txt,.csv" style="display:none">
-                            </label>
+                <!-- Step 1: Connect -->
+                <div id="bulkStep1">
+                    <div style="margin-bottom:16px;padding:14px;background:var(--bg-tertiary);border-radius:10px;font-size:0.85rem;color:var(--text-secondary);display:flex;gap:10px;align-items:flex-start">
+                        ${icon('info', 16)} <div>Conecte sua conta GitHub ou GitLab para ver todos os seus repositórios e selecionar quais deseja monitorar.</div>
+                    </div>
+                    <div class="filter-row">
+                        <div class="filter-input-wrap">
+                            <span class="filter-input-icon">${icon('git-branch', 14)}</span>
+                            <select class="input filter-input" id="fBulkPlatform">
+                                <option value="github" ${gp === 'github' ? 'selected' : ''}>GitHub</option>
+                                <option value="gitlab" ${gp === 'gitlab' ? 'selected' : ''}>GitLab</option>
+                            </select>
+                        </div>
+                        <div class="filter-input-wrap">
+                            <span class="filter-input-icon">${icon('key', 14)}</span>
+                            <input class="input filter-input" id="fBulkToken" type="password" value="${esc(gt)}" placeholder="ghp_... ou glpat-...">
                         </div>
                     </div>
+                    <button class="btn btn-primary" id="fBulkFetch" style="width:100%;justify-content:center;margin-top:12px">${icon('search')} Buscar Repositórios</button>
+                    <div id="fBulkError" style="margin-top:10px"></div>
                 </div>
-                <div class="form-actions" style="margin-top:16px">
-                    <button class="btn btn-secondary" onclick="document.getElementById('actionModalClose').click()">Cancelar</button>
-                    <button class="btn btn-primary" id="fBulkRepoSubmit">${icon('layers')} Adicionar Todos</button>
+
+                <!-- Step 2: Select (hidden initially) -->
+                <div id="bulkStep2" style="display:none">
+                    <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+                        <div class="filter-input-wrap" style="flex:1">
+                            <span class="filter-input-icon">${icon('search', 14)}</span>
+                            <input class="input filter-input" id="fBulkSearch" placeholder="Filtrar repositórios...">
+                        </div>
+                        <button class="btn btn-secondary btn-sm" id="fBulkSelectAll">Selecionar todos</button>
+                        <button class="btn btn-secondary btn-sm" id="fBulkClearSel">Limpar</button>
+                    </div>
+                    <div id="fBulkRepoList" class="repo-select-list"></div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;padding-top:12px;border-top:1px solid var(--border-color)">
+                        <span id="fBulkCount" style="font-size:0.85rem;color:var(--text-tertiary)">0 selecionados</span>
+                        <div style="display:flex;gap:8px">
+                            <button class="btn btn-secondary btn-sm" id="fBulkBack">${icon('arrow-left', 14)} Voltar</button>
+                            <button class="btn btn-primary btn-sm" id="fBulkAdd" disabled>${icon('plus', 14)} Adicionar Selecionados</button>
+                        </div>
+                    </div>
+                    <div id="fBulkResult" style="margin-top:10px;max-height:150px;overflow-y:auto"></div>
                 </div>
-                <div id="fBulkRepoResult" style="max-height:200px;overflow-y:auto"></div>
             </div>`);
 
-        const repoList = $('fBulkRepoList');
-        const countEl = $('bulkRepoCount');
-        function updateCount() {
-            const lines = repoList.value.split(/[\r\n,]+/).map(l => l.trim()).filter(l => l && l.includes('/'));
-            countEl.textContent = lines.length + ' repositório' + (lines.length !== 1 ? 's' : '');
-        }
-        repoList.addEventListener('input', updateCount);
-
-        $('bulkRepoFile').addEventListener('change', function() {
-            if (!this.files.length) return;
-            const reader = new FileReader();
-            reader.onload = e => { repoList.value = e.target.result; updateCount(); toast('Lista importada!'); };
-            reader.readAsText(this.files[0]);
-        });
-
-        $('fBulkRepoSubmit').addEventListener('click', async () => {
-            const btn = $('fBulkRepoSubmit');
+        // Step 1: Fetch repos
+        $('fBulkFetch').addEventListener('click', async () => {
             const token = $('fBulkToken').value.trim();
             const platform = $('fBulkPlatform').value;
-            const branch = $('fBulkBranch').value.trim() || 'main';
-            const lines = repoList.value.split(/[\r\n,]+/).map(l => l.trim()).filter(l => l && l.includes('/'));
+            if (!token) { $('fBulkError').innerHTML = '<div class="form-error">Insira o Access Token</div>'; return; }
 
-            if (!token) { $('fBulkRepoResult').innerHTML = '<div class="form-error">Insira o Access Token</div>'; return; }
-            if (!lines.length) { $('fBulkRepoResult').innerHTML = '<div class="form-error">Insira pelo menos um repositório (owner/repo)</div>'; return; }
+            const btn = $('fBulkFetch');
+            btn.disabled = true; btn.innerHTML = icon('loader', 16) + ' Buscando...';
+            $('fBulkError').innerHTML = '';
 
-            btn.disabled = true; btn.innerHTML = icon('loader', 16) + ' Adicionando ' + lines.length + '...';
+            try {
+                await ensureAuth();
+                const data = await api('GET', '/orgs/' + ORG_ID + '/repos/available?platform=' + platform + '&token=' + encodeURIComponent(token));
+                fetchedRepos = data.repos || [];
+                alreadyAdded = data.already_added || [];
+
+                if (!fetchedRepos.length) {
+                    $('fBulkError').innerHTML = '<div class="form-error">Nenhum repositório encontrado nesta conta</div>';
+                    btn.disabled = false; btn.innerHTML = icon('search') + ' Buscar Repositórios';
+                    return;
+                }
+
+                // Save token globally
+                localStorage.setItem('cg_git_token', token);
+                localStorage.setItem('cg_git_platform', platform);
+
+                // Switch to step 2
+                $('bulkStep1').style.display = 'none';
+                $('bulkStep2').style.display = 'block';
+                selected.clear();
+                renderBulkRepoList();
+            } catch (e) {
+                $('fBulkError').innerHTML = '<div class="form-error">' + icon('alert-circle', 14) + ' ' + esc(e.message || e.detail || 'Erro ao buscar repositórios') + '</div>';
+                btn.disabled = false; btn.innerHTML = icon('search') + ' Buscar Repositórios';
+            }
+        });
+
+        function renderBulkRepoList() {
+            const search = ($('fBulkSearch') ? $('fBulkSearch').value : '').toLowerCase();
+            const filtered = fetchedRepos.filter(r => !search || r.full_name.toLowerCase().includes(search) || (r.description || '').toLowerCase().includes(search) || (r.language || '').toLowerCase().includes(search));
+
+            $('fBulkRepoList').innerHTML = filtered.map(r => {
+                const added = alreadyAdded.includes(r.full_name);
+                const checked = selected.has(r.full_name);
+                return `<label class="repo-select-item ${added ? 'disabled' : ''} ${checked ? 'selected' : ''}" data-repo="${esc(r.full_name)}">
+                    <input type="checkbox" ${checked ? 'checked' : ''} ${added ? 'disabled' : ''} data-repo-cb="${esc(r.full_name)}">
+                    <div class="repo-select-info">
+                        <div class="repo-select-name">${esc(r.full_name)} ${r.private ? '<span class="repo-select-badge private">' + icon('lock', 11) + ' Privado</span>' : '<span class="repo-select-badge public">' + icon('globe', 11) + ' Público</span>'}</div>
+                        <div class="repo-select-meta">${r.language ? '<span>' + esc(r.language) + '</span>' : ''}${r.stars ? '<span>' + icon('star', 11) + ' ' + r.stars + '</span>' : ''}${r.description ? '<span>' + esc(r.description.slice(0, 60)) + '</span>' : ''}</div>
+                    </div>
+                    ${added ? '<span class="repo-select-added">' + icon('check-circle', 14) + ' Já adicionado</span>' : ''}
+                </label>`;
+            }).join('') || '<div style="padding:20px;text-align:center;color:var(--text-tertiary)">Nenhum repo encontrado</div>';
+
+            $('fBulkRepoList').querySelectorAll('[data-repo-cb]').forEach(cb => {
+                cb.addEventListener('change', () => {
+                    if (cb.checked) selected.add(cb.dataset.repoCb);
+                    else selected.delete(cb.dataset.repoCb);
+                    updateBulkCount();
+                    cb.closest('.repo-select-item').classList.toggle('selected', cb.checked);
+                });
+            });
+            updateBulkCount();
+        }
+
+        function updateBulkCount() {
+            const count = selected.size;
+            $('fBulkCount').textContent = count + ' selecionado' + (count !== 1 ? 's' : '');
+            $('fBulkAdd').disabled = count === 0;
+            $('fBulkAdd').innerHTML = icon('plus', 14) + ' Adicionar ' + (count || '') + ' Selecionado' + (count !== 1 ? 's' : '');
+        }
+
+        // Search
+        document.addEventListener('input', e => { if (e.target.id === 'fBulkSearch') renderBulkRepoList(); });
+
+        // Select all / clear
+        $('fBulkSelectAll').addEventListener('click', () => {
+            fetchedRepos.forEach(r => { if (!alreadyAdded.includes(r.full_name)) selected.add(r.full_name); });
+            renderBulkRepoList();
+        });
+        $('fBulkClearSel').addEventListener('click', () => { selected.clear(); renderBulkRepoList(); });
+
+        // Back button
+        $('fBulkBack').addEventListener('click', () => {
+            $('bulkStep1').style.display = 'block';
+            $('bulkStep2').style.display = 'none';
+            const btn = $('fBulkFetch');
+            btn.disabled = false; btn.innerHTML = icon('search') + ' Buscar Repositórios';
+        });
+
+        // Add selected repos
+        $('fBulkAdd').addEventListener('click', async () => {
+            const token = $('fBulkToken').value.trim();
+            const platform = $('fBulkPlatform').value;
+            const repos = [...selected];
+            if (!repos.length) return;
+
+            const btn = $('fBulkAdd');
+            btn.disabled = true; btn.innerHTML = icon('loader', 14) + ' Adicionando...';
             let ok = 0, fail = 0;
             const results = [];
 
-            for (const repo of lines) {
+            for (const repoName of repos) {
+                const repoData = fetchedRepos.find(r => r.full_name === repoName);
+                const branch = repoData ? repoData.default_branch : 'main';
                 try {
                     await ensureAuth();
-                    await api('POST', '/orgs/' + ORG_ID + '/repos', { platform, full_name: repo, access_token: token, default_branch: branch });
+                    await api('POST', '/orgs/' + ORG_ID + '/repos', { platform, full_name: repoName, access_token: token, default_branch: branch });
                     ok++;
-                    results.push('<div style="color:var(--accent-success);font-size:0.85rem;display:flex;align-items:center;gap:6px">' + icon('check-circle', 14) + ' ' + esc(repo) + '</div>');
+                    alreadyAdded.push(repoName);
+                    results.push('<div style="color:var(--accent-success);font-size:0.85rem;display:flex;align-items:center;gap:6px">' + icon('check-circle', 14) + ' ' + esc(repoName) + '</div>');
                 } catch (e) {
                     fail++;
-                    results.push('<div style="color:var(--accent-danger);font-size:0.85rem;display:flex;align-items:center;gap:6px">' + icon('x-circle', 14) + ' ' + esc(repo) + ' — ' + esc(e.message || 'erro') + '</div>');
+                    results.push('<div style="color:var(--accent-danger);font-size:0.85rem;display:flex;align-items:center;gap:6px">' + icon('x-circle', 14) + ' ' + esc(repoName) + ' — ' + esc(e.message || 'erro') + '</div>');
                 }
-                $('fBulkRepoResult').innerHTML = '<div style="margin-top:12px;display:flex;flex-direction:column;gap:4px">' + results.join('') + '</div>';
+                $('fBulkResult').innerHTML = results.join('');
             }
 
-            $('fBulkRepoResult').innerHTML += '<div style="margin-top:12px;padding:12px;background:var(--bg-tertiary);border-radius:8px;font-weight:600;color:var(--text-primary);text-align:center">' + icon('check', 16) + ' ' + ok + ' adicionado(s)' + (fail ? ' · ' + fail + ' falha(s)' : '') + '</div>';
-            btn.disabled = false; btn.innerHTML = icon('layers') + ' Adicionar Todos';
+            selected.clear();
+            renderBulkRepoList();
+            btn.disabled = false; btn.innerHTML = icon('plus', 14) + ' Adicionar Selecionados';
             if (ok > 0) { toast(ok + ' repositório(s) adicionado(s)!'); loadRepos(); }
-            if (window.lucide) lucide.createIcons();
         });
     }
 
@@ -940,7 +1363,7 @@
                     </div>
                 </div>
             `;
-            if (window.lucide) lucide.createIcons();
+            refreshIcons();
         } else {
             overlay.innerHTML = `
                 <div class="card stagger-in" style="max-width:500px;width:90%;background:var(--bg-modal);">
@@ -1139,6 +1562,10 @@
     // ================================================================
     //  MERGE REQUESTS
     // ================================================================
+    let allMRsNormalized = [];
+    let mrPage = 1;
+    const MRS_PER_PAGE = 15;
+
     async function renderMergeRequests(q) {
         pageContent.innerHTML = `
             <div class="page-header-row">
@@ -1147,29 +1574,156 @@
                     <button class="btn btn-primary" id="btnBulkAnalysis">${icon('sparkles')} Análise Rápida</button>
                 </div>
             </div>
-            <div class="card"><div class="card-header"><span class="card-title">Todos os MRs</span><span class="card-badge" id="mrPageCount">...</span></div><div class="mr-table-container" id="mrPageTable">${showLoading()}</div></div>`;
+            <!-- Filtros -->
+            <div class="card" style="margin-bottom:16px">
+                <div class="card-body" style="padding:16px">
+                    <div class="filter-row">
+                        <div class="filter-input-wrap">
+                            <span class="filter-input-icon">${icon('search', 14)}</span>
+                            <input class="input filter-input" id="mrSearch" type="text" placeholder="Buscar MR...">
+                        </div>
+                        <div class="filter-input-wrap">
+                            <span class="filter-input-icon">${icon('calendar', 14)}</span>
+                            <input class="input filter-input" id="mrDateFrom" type="date">
+                            <span class="filter-input-hint">De</span>
+                        </div>
+                        <div class="filter-input-wrap">
+                            <span class="filter-input-icon">${icon('calendar', 14)}</span>
+                            <input class="input filter-input" id="mrDateTo" type="date">
+                            <span class="filter-input-hint">Até</span>
+                        </div>
+                    </div>
+                    <div class="filter-row" style="margin-top:10px">
+                        <div class="filter-input-wrap">
+                            <span class="filter-input-icon">${icon('activity', 14)}</span>
+                            <select class="input filter-input" id="mrFilterStatus">
+                                <option value="all">Status: Todos</option>
+                                <option value="approved">Aprovado</option>
+                                <option value="pending">Pendente</option>
+                                <option value="issues">Issues</option>
+                                <option value="analyzing">Analisando</option>
+                                <option value="merged">Merged</option>
+                            </select>
+                        </div>
+                        <div class="filter-input-wrap">
+                            <span class="filter-input-icon">${icon('star', 14)}</span>
+                            <select class="input filter-input" id="mrFilterScore">
+                                <option value="all">Score: Todos</option>
+                                <option value="high">65+ Verde</option>
+                                <option value="medium">50-64 Amarelo</option>
+                                <option value="low">0-49 Vermelho</option>
+                            </select>
+                        </div>
+                        <div class="filter-input-wrap">
+                            <span class="filter-input-icon">${icon('user', 14)}</span>
+                            <select class="input filter-input" id="mrFilterAuthor">
+                                <option value="all">Autor: Todos</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Todos os MRs</span>
+                    <span class="card-badge" id="mrPageCount">...</span>
+                </div>
+                <div class="mr-table-container" id="mrPageTable">${showLoading()}</div>
+                <div id="mrPagination"></div>
+            </div>`;
         if ($('btnBulkAnalysis')) $('btnBulkAnalysis').addEventListener('click', openBulkAddModal);
 
         try {
             const mrs = await loadAllMRs();
-            const normalized = mrs.map(normalizeMR);
-            const filtered = q ? normalized.filter(m => m.title.toLowerCase().includes(q) || m.branch.toLowerCase().includes(q) || m.author.name.toLowerCase().includes(q)) : normalized;
-            $('mrPageCount').textContent = filtered.length;
-            $('mrPageTable').innerHTML = renderMRTable(filtered);
-            attachTableListeners();
+            allMRsNormalized = mrs.map(normalizeMR);
         } catch (_) {
-            if (typeof MERGE_REQUESTS !== 'undefined') {
-                const mrs = q ? MERGE_REQUESTS.filter(m => m.title.toLowerCase().includes(q) || m.branch.toLowerCase().includes(q) || m.author.name.toLowerCase().includes(q)) : MERGE_REQUESTS;
-                $('mrPageCount').textContent = mrs.length;
-                $('mrPageTable').innerHTML = renderMRTable(mrs);
-                attachTableListeners();
-            }
+            allMRsNormalized = typeof MERGE_REQUESTS !== 'undefined' ? MERGE_REQUESTS : [];
         }
+
+        // Populate author filter
+        const authors = [...new Set(allMRsNormalized.map(m => m.author.name))].sort();
+        const authorSelect = $('mrFilterAuthor');
+        authors.forEach(a => { const o = document.createElement('option'); o.value = a; o.textContent = a; authorSelect.appendChild(o); });
+
+        if (q) $('mrSearch').value = q;
+        mrPage = 1;
+        renderFilteredMRs();
+
+        $('mrSearch').addEventListener('input', () => { mrPage = 1; renderFilteredMRs(); });
+        if ($('mrDateFrom')) $('mrDateFrom').addEventListener('change', () => { mrPage = 1; renderFilteredMRs(); });
+        if ($('mrDateTo')) $('mrDateTo').addEventListener('change', () => { mrPage = 1; renderFilteredMRs(); });
+        $('mrFilterStatus').addEventListener('change', () => { mrPage = 1; renderFilteredMRs(); });
+        $('mrFilterScore').addEventListener('change', () => { mrPage = 1; renderFilteredMRs(); });
+        $('mrFilterAuthor').addEventListener('change', () => { mrPage = 1; renderFilteredMRs(); });
+    }
+
+    function renderFilteredMRs() {
+        const q = ($('mrSearch') ? $('mrSearch').value : '').toLowerCase();
+        const mrDateFrom = $('mrDateFrom') ? $('mrDateFrom').value : '';
+        const mrDateTo = $('mrDateTo') ? $('mrDateTo').value : '';
+        const status = $('mrFilterStatus') ? $('mrFilterStatus').value : 'all';
+        const score = $('mrFilterScore') ? $('mrFilterScore').value : 'all';
+        const author = $('mrFilterAuthor') ? $('mrFilterAuthor').value : 'all';
+
+        let filtered = allMRsNormalized;
+        if (q) filtered = filtered.filter(m => m.title.toLowerCase().includes(q) || m.branch.toLowerCase().includes(q) || m.author.name.toLowerCase().includes(q));
+        if (mrDateFrom) filtered = filtered.filter(m => m.createdAt && m.createdAt.slice(0, 10) >= mrDateFrom);
+        if (mrDateTo) filtered = filtered.filter(m => m.createdAt && m.createdAt.slice(0, 10) <= mrDateTo);
+        if (status !== 'all') filtered = filtered.filter(m => m.status === status);
+        if (score === 'high') filtered = filtered.filter(m => m.aiScore !== null && m.aiScore >= 65);
+        else if (score === 'medium') filtered = filtered.filter(m => m.aiScore !== null && m.aiScore >= 50 && m.aiScore < 65);
+        else if (score === 'low') filtered = filtered.filter(m => m.aiScore !== null && m.aiScore < 50);
+        if (author !== 'all') filtered = filtered.filter(m => m.author.name === author);
+
+        const totalPages = Math.max(1, Math.ceil(filtered.length / MRS_PER_PAGE));
+        if (mrPage > totalPages) mrPage = totalPages;
+        const start = (mrPage - 1) * MRS_PER_PAGE;
+        const pageMRs = filtered.slice(start, start + MRS_PER_PAGE);
+
+        $('mrPageCount').textContent = filtered.length;
+        $('mrPageTable').innerHTML = renderMRTable(pageMRs);
+        attachTableListeners();
+
+        $('mrPagination').innerHTML = totalPages > 1 ? `<div class="repo-pagination">
+            <button class="btn btn-secondary btn-sm" id="mrPrev" ${mrPage <= 1 ? 'disabled' : ''}>${icon('chevron-left', 14)} Anterior</button>
+            <span style="color:var(--text-secondary);font-size:0.88rem">Página <strong>${mrPage}</strong> de <strong>${totalPages}</strong></span>
+            <button class="btn btn-secondary btn-sm" id="mrNext" ${mrPage >= totalPages ? 'disabled' : ''}>Próxima ${icon('chevron-right', 14)}</button>
+        </div>` : '';
+
+        if ($('mrPrev')) $('mrPrev').addEventListener('click', () => { mrPage--; renderFilteredMRs(); });
+        if ($('mrNext')) $('mrNext').addEventListener('click', () => { mrPage++; renderFilteredMRs(); });
+    }
+
+    let sortCol = null, sortAsc = true;
+
+    function sortMRs(mrs) {
+        if (!sortCol) return mrs;
+        const sorted = [...mrs];
+        sorted.sort((a, b) => {
+            let va, vb;
+            if (sortCol === 'score') { va = a.aiScore ?? -1; vb = b.aiScore ?? -1; }
+            else if (sortCol === 'author') { va = a.author.name.toLowerCase(); vb = b.author.name.toLowerCase(); }
+            else if (sortCol === 'status') { va = a.status; vb = b.status; }
+            else if (sortCol === 'time') { va = a.createdAt || ''; vb = b.createdAt || ''; }
+            else if (sortCol === 'changes') { va = a.additions + a.deletions; vb = b.additions + b.deletions; }
+            else return 0;
+            if (va < vb) return sortAsc ? -1 : 1;
+            if (va > vb) return sortAsc ? 1 : -1;
+            return 0;
+        });
+        return sorted;
+    }
+
+    function sortIcon(col) {
+        if (sortCol !== col) return `<span class="sort-icon">${icon('arrow-up-down', 12)}</span>`;
+        return `<span class="sort-icon active">${sortAsc ? icon('arrow-up', 12) : icon('arrow-down', 12)}</span>`;
     }
 
     function renderMRTable(mrs) {
         if (!mrs.length) return `<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><h3>Nenhum MR encontrado</h3></div>`;
-        return `<table class="mr-table"><thead><tr><th>Merge Request</th><th>Autor</th><th>Status</th><th>Score</th><th>Alteracoes</th><th>Tempo</th></tr></thead><tbody>${mrs.map(mr => {
+        const sorted = sortMRs(mrs);
+        return `<table class="mr-table"><thead><tr><th>Merge Request</th><th class="sortable" data-sort="author">Autor ${sortIcon('author')}</th><th class="sortable" data-sort="status">Status ${sortIcon('status')}</th><th class="sortable" data-sort="score">Score ${sortIcon('score')}</th><th class="sortable" data-sort="changes">Alterações ${sortIcon('changes')}</th><th class="sortable" data-sort="time">Tempo ${sortIcon('time')}</th></tr></thead><tbody>${sorted.map(mr => {
             const s = AnalysisEngine.getStatusInfo(mr.status), g = mr.aiScore !== null && mr.aiScore !== undefined ? AnalysisEngine.getScoreGrade(mr.aiScore) : null;
             const repoId = mr._repo_id || '';
             return `<tr data-mr-id="${mr.id}" data-repo-id="${repoId}"><td><div class="mr-title-cell"><span class="mr-title">${esc(mr.title)}</span><span class="mr-branch">${esc(mr.branch)} → ${esc(mr.targetBranch)}</span></div></td><td><div class="mr-author"><div class="mr-author-avatar" style="background:${mr.author.color}">${mr.author.initials}</div><span>${esc(mr.author.name)}</span></div></td><td><span class="badge ${s.class}">${s.icon} ${s.label}</span></td><td>${g ? `<div class="score-pill"><div class="score-ring ${g.class}">${mr.aiScore}</div></div>` : '<div class="analyzing-indicator"><div class="analyzing-dots"><span></span><span></span><span></span></div>Analisando</div>'}</td><td><span style="color:var(--accent-success)">+${mr.additions}</span> <span style="color:var(--accent-danger)">-${mr.deletions}</span></td><td style="color:var(--text-secondary);white-space:nowrap">${AnalysisEngine.timeAgo(mr.createdAt)}</td></tr>`;
@@ -1181,6 +1735,14 @@
             const mrId = row.dataset.mrId;
             const repoId = row.dataset.repoId;
             openMRDetail(mrId, repoId && repoId !== '' && repoId !== 'undefined' ? repoId : null);
+        }));
+        document.querySelectorAll('.mr-table th.sortable').forEach(th => th.addEventListener('click', e => {
+            e.stopPropagation();
+            const col = th.dataset.sort;
+            if (sortCol === col) sortAsc = !sortAsc;
+            else { sortCol = col; sortAsc = true; }
+            if (currentPage === 'dashboard') renderDashMRs();
+            else if (currentPage === 'merge-requests') renderFilteredMRs();
         }));
     }
 
@@ -1685,17 +2247,42 @@
             if (s) settings = { ...settings, ...s };
         } catch (_) { /* use defaults */ }
 
+        const savedGitToken = localStorage.getItem('cg_git_token') || '';
+        const savedGitPlatform = localStorage.getItem('cg_git_platform') || 'github';
+
         $('settingsContainer').innerHTML = `
-            <div class="settings-section stagger-in"><h3 class="settings-section-title">${icon('git-branch')} Integração Git</h3><div class="settings-card"><div class="settings-row"><div class="settings-row-info"><h4>Plataforma</h4><p>Plataforma de versionamento</p></div><select class="settings-input" style="min-width:180px"><option>GitHub</option><option>GitLab</option><option>Bitbucket</option></select></div><div class="settings-row"><div class="settings-row-info"><h4>Access Token</h4><p>Token com permissão de leitura</p></div><input class="settings-input" type="password" placeholder="ghp_xxx"></div></div></div>
+            <div class="settings-section stagger-in"><h3 class="settings-section-title">${icon('key')} Token Global Git</h3>
+                <div style="margin-bottom:12px;padding:12px 16px;background:var(--bg-tertiary);border-radius:8px;font-size:0.85rem;color:var(--text-secondary)">
+                    ${icon('info', 15)} Configure seu token aqui uma única vez. Ele será usado automaticamente ao adicionar repositórios — sem precisar colar toda vez.
+                </div>
+                <div class="settings-card">
+                    <div class="settings-row"><div class="settings-row-info"><h4>Plataforma Padrão</h4><p>GitHub, GitLab ou Bitbucket</p></div><select class="settings-input" id="settingsGitPlatform" style="min-width:180px"><option value="github" ${savedGitPlatform === 'github' ? 'selected' : ''}>GitHub</option><option value="gitlab" ${savedGitPlatform === 'gitlab' ? 'selected' : ''}>GitLab</option><option value="bitbucket" ${savedGitPlatform === 'bitbucket' ? 'selected' : ''}>Bitbucket</option></select></div>
+                    <div class="settings-row"><div class="settings-row-info"><h4>Access Token</h4><p>Token com permissão de leitura dos repos</p></div><div style="display:flex;gap:8px;align-items:center"><input class="settings-input" id="settingsGitToken" type="password" value="${esc(savedGitToken)}" placeholder="ghp_... ou glpat-..." style="font-family:monospace"><button class="btn btn-secondary btn-sm" id="btnToggleToken" style="white-space:nowrap">${icon('eye', 14)}</button></div></div>
+                    <div class="settings-row"><div class="settings-row-info"><h4>Status</h4><p>Verificar se o token é válido</p></div><div style="display:flex;align-items:center;gap:8px"><span id="tokenStatus" style="font-size:0.85rem;color:var(--text-tertiary)">${savedGitToken ? icon('check-circle', 14) + ' Token configurado' : icon('alert-circle', 14) + ' Nenhum token salvo'}</span></div></div>
+                </div>
+            </div>
             <div class="settings-section stagger-in" style="animation-delay:0.15s"><h3 class="settings-section-title">${icon('bot')} IA</h3><div class="settings-card"><div class="settings-row"><div class="settings-row-info"><h4>Modelo</h4><p>Modelo de IA para análise</p></div><select class="settings-input" style="min-width:180px"><option>Claude Sonnet 4.6</option><option>Claude Opus 4.6</option><option>GPT-4o</option></select></div><div class="settings-row"><div class="settings-row-info"><h4>Análise Automatica</h4><p>Analisar novos MRs automaticamente</p></div><button class="rule-toggle ${settings.auto_analyze ? 'active' : ''}" id="autoToggle"></button></div><div class="settings-row"><div class="settings-row-info"><h4>Score Minimo</h4><p>MRs abaixo serao sinalizados</p></div><input class="settings-input" type="number" min="0" max="100" value="${settings.min_score_threshold}" id="settingsMinScore" style="min-width:100px;text-align:center"></div></div></div>
             <div class="settings-section stagger-in" style="animation-delay:0.3s"><h3 class="settings-section-title">${icon('bell')} Notificações</h3><div class="settings-card"><div class="settings-row"><div class="settings-row-info"><h4>E-mail</h4><p>E-mail para notificacoes</p></div><input class="settings-input" type="email" value="${esc(settings.notification_email || '')}" id="settingsEmail" placeholder="equipe@empresa.com"></div><div class="settings-row"><div class="settings-row-info"><h4>Webhook Slack</h4></div><input class="settings-input" type="text" value="${esc(settings.slack_webhook_url || '')}" id="settingsSlack" placeholder="https://hooks.slack.com/..."></div><div class="settings-row"><div class="settings-row-info"><h4>Webhook Discord</h4></div><input class="settings-input" type="text" value="${esc(settings.discord_webhook_url || '')}" id="settingsDiscord" placeholder="https://discord.com/api/webhooks/..."></div></div></div>
             <div style="margin-top:20px"><button class="btn btn-primary" id="btnSaveSettings">${icon('save')} Salvar Configurações</button></div>`;
 
         const at = $('autoToggle'); if (at) at.addEventListener('click', () => at.classList.toggle('active'));
 
+        $('btnToggleToken').addEventListener('click', () => {
+            const inp = $('settingsGitToken');
+            inp.type = inp.type === 'password' ? 'text' : 'password';
+        });
+
         $('btnSaveSettings').addEventListener('click', async () => {
             const btn = $('btnSaveSettings'); btn.disabled = true; btn.textContent = 'Salvando...';
             try {
+                // Save git token locally
+                const gitToken = $('settingsGitToken').value.trim();
+                const gitPlatform = $('settingsGitPlatform').value;
+                if (gitToken) localStorage.setItem('cg_git_token', gitToken);
+                else localStorage.removeItem('cg_git_token');
+                localStorage.setItem('cg_git_platform', gitPlatform);
+                $('tokenStatus').innerHTML = gitToken ? icon('check-circle', 14) + ' Token configurado' : icon('alert-circle', 14) + ' Nenhum token salvo';
+
                 await ensureAuth();
                 await api('PUT', `/orgs/${ORG_ID}/settings`, {
                     auto_analyze: $('autoToggle').classList.contains('active'),
@@ -1706,7 +2293,7 @@
                 });
                 toast('Configurações salvas!');
             } catch (e) { toast(e.message || 'Erro ao salvar', 'error'); }
-            btn.disabled = false; btn.textContent = 'Salvar Configurações';
+            btn.disabled = false; btn.innerHTML = icon('save') + ' Salvar Configurações';
         });
     }
 
@@ -1723,14 +2310,14 @@
                 <div class="card-body" style="padding:24px">
                     ${formRow('Título', 'Descreva brevemente o que foi alterado', '<input class="input" id="upTitle" placeholder="Ex: Refatorar módulo de pagamentos">')}
                     ${formRow('Descrição', 'Opcional', '<textarea class="input" id="upDesc" rows="2" placeholder="Detalhes adicionais..." style="resize:vertical"></textarea>')}
-                    <div class="form-row"><label class="form-label">Arquivo</label><span class="form-hint">.py, .js, .ts, .java, .go, .zip, .patch — arraste ou clique</span>
-                    <div id="upDropZone" style="border:2px dashed var(--border-accent);border-radius:var(--radius-md);padding:32px;text-align:center;cursor:pointer;transition:all 0.2s;background:var(--bg-tertiary)">
-                        <div style="margin-bottom:8px">${icon('upload-cloud', 36)}</div>
-                        <div style="font-weight:600;color:var(--text-primary);font-size:0.95rem">Arraste seu arquivo aqui</div>
-                        <div style="color:var(--text-tertiary);font-size:0.82rem;margin-top:4px">ou clique para selecionar</div>
+                    <div id="upDropZone" class="upload-dropzone">
+                        <div class="upload-dropzone-icon">${icon('upload-cloud', 40)}</div>
+                        <div class="upload-dropzone-title">Arraste seu arquivo aqui</div>
+                        <div class="upload-dropzone-sub">ou clique para selecionar</div>
+                        <div class="upload-dropzone-formats">.py .js .ts .java .go .zip .patch</div>
                         <input type="file" id="upFile" accept=".py,.js,.ts,.tsx,.jsx,.java,.go,.rs,.rb,.php,.c,.cpp,.h,.cs,.swift,.kt,.patch,.diff,.txt,.zip,.json,.yaml,.yml,.html,.css,.sql,.sh" style="display:none">
-                        <div id="upFileName" style="display:none;margin-top:10px;font-size:0.88rem;color:var(--accent-success);font-weight:600"></div>
-                    </div></div>
+                        <div id="upFileName" class="upload-dropzone-file"></div>
+                    </div>
                     <div style="text-align:center;color:var(--text-tertiary);margin:12px 0;font-weight:600">— OU —</div>
                     ${formRow('Diff inline', 'Cole o diff diretamente aqui', '<textarea class="input" id="upDiff" rows="8" style="width:100%;font-family:JetBrains Mono,monospace;font-size:0.82rem;resize:vertical" placeholder="diff --git a/file.py b/file.py\n--- a/file.py\n+++ b/file.py\n@@ -1,3 +1,4 @@\n+import os\n ..."></textarea>')}
                     <div style="margin-top:16px;display:flex;gap:12px;align-items:center">
@@ -1763,15 +2350,15 @@
 
         const upDrop = $('upDropZone'), upFileIn = $('upFile');
         upDrop.addEventListener('click', () => upFileIn.click());
-        upDrop.addEventListener('dragover', e => { e.preventDefault(); upDrop.style.borderColor = 'var(--accent-success)'; upDrop.style.background = 'rgba(52,211,153,0.05)'; });
-        upDrop.addEventListener('dragleave', () => { upDrop.style.borderColor = 'var(--border-accent)'; upDrop.style.background = 'var(--bg-tertiary)'; });
-        upDrop.addEventListener('drop', e => { e.preventDefault(); upDrop.style.borderColor = 'var(--border-accent)'; upDrop.style.background = 'var(--bg-tertiary)'; if (e.dataTransfer.files.length) { upFileIn.files = e.dataTransfer.files; showUpFileName(e.dataTransfer.files[0].name); } });
+        upDrop.addEventListener('dragover', e => { e.preventDefault(); upDrop.classList.add('dragover'); });
+        upDrop.addEventListener('dragleave', () => { upDrop.classList.remove('dragover'); });
+        upDrop.addEventListener('drop', e => { e.preventDefault(); upDrop.classList.remove('dragover'); if (e.dataTransfer.files.length) { upFileIn.files = e.dataTransfer.files; showUpFileName(e.dataTransfer.files[0].name); } });
         upFileIn.addEventListener('change', () => { if (upFileIn.files.length) showUpFileName(upFileIn.files[0].name); });
 
         function showUpFileName(name) {
             const el = $('upFileName');
-            el.style.display = 'block';
-            el.innerHTML = icon('check-circle', 14) + ' ' + esc(name);
+            el.classList.add('show');
+            el.innerHTML = icon('check-circle', 16) + ' ' + esc(name);
         }
     }
 
@@ -1868,8 +2455,12 @@
     // ================================================================
     async function renderAnalyticsPage() {
         pageContent.innerHTML = `
-            <h1 class="page-title">Analytics</h1>
-            <p class="page-subtitle">Metricas historicas, ranking de devs e evolucao do score</p>
+            <div class="page-header-row">
+                <div>
+                    <h1 class="page-title">Analytics</h1>
+                    <p class="page-subtitle">Métricas históricas, ranking de devs e evolução do score</p>
+                </div>
+            </div>
             <div id="analyticsContainer">${showLoading()}</div>`;
 
         try {
@@ -1903,7 +2494,7 @@
         const evolutionBars = score_evolution.map(s => {
             const val = s.avg_score || 0;
             const color = val >= 75 ? 'var(--accent-success)' : val >= 60 ? 'var(--accent-warning)' : val > 0 ? 'var(--accent-danger)' : 'var(--bg-tertiary)';
-            return `<div class="chart-bar-group"><div class="chart-bar" style="height:${val > 0 ? (val/100)*170 : 5}px;background:${color}" data-value="${val || '-'}"></div><span class="chart-label">${s.week}</span></div>`;
+            return `<div class="chart-bar-group"><div class="chart-bar" style="height:${val > 0 ? (val/100)*120 : 5}px;background:${color}" data-value="${val || '-'}"></div><span class="chart-label">${s.week}</span></div>`;
         }).join('');
 
         $('analyticsContainer').innerHTML = `
@@ -1911,7 +2502,7 @@
             <div class="card stagger-in" style="animation-delay:0.1s">
                 <div class="card-header"><span class="card-title"><span class="icon-bounce">${icon('trophy')}</span> Ranking de Desenvolvedores</span><span class="card-badge">${dev_ranking.length} devs</span></div>
                 <div class="card-body">${dev_ranking.length ? `
-                    <table class="mr-table"><thead><tr><th>#</th><th>Dev</th><th>Score Médio</th><th>Total MRs</th><th>Aprovados</th><th>Issues</th></tr></thead>
+                    <table class="mr-table"><thead><tr><th style="width:50px">#</th><th>Desenvolvedor</th><th>Score Médio</th><th>Total MRs</th><th>Aprovados</th><th>Issues</th></tr></thead>
                     <tbody>${devRows}</tbody></table>
                 ` : '<div class="empty-state"><h3>Nenhum dado</h3></div>'}</div>
             </div>
@@ -1924,22 +2515,22 @@
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
                             <div style="padding:16px;border-radius:var(--radius-md);background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.2)">
                                 <div style="font-size:1.8rem;font-weight:800;color:var(--accent-danger)">${issue_heatmap.critical || 0}</div>
-                                <div style="color:var(--text-secondary);font-size:0.85rem">Críticas</div>
-                                <div style="margin-top:4px;height:4px;background:var(--bg-tertiary);border-radius:2px"><div style="height:100%;width:${((issue_heatmap.critical||0)/heatTotal)*100}%;background:var(--accent-danger);border-radius:2px"></div></div>
+                                <div style="color:var(--text-primary);font-size:0.85rem;font-weight:600;margin-top:4px">Críticas</div>
+                                <div style="margin-top:6px;height:4px;background:var(--bg-tertiary);border-radius:2px"><div style="height:100%;width:${((issue_heatmap.critical||0)/heatTotal)*100}%;background:var(--accent-danger);border-radius:2px"></div></div>
                             </div>
                             <div style="padding:16px;border-radius:var(--radius-md);background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.2)">
                                 <div style="font-size:1.8rem;font-weight:800;color:var(--accent-warning)">${issue_heatmap.warning || 0}</div>
-                                <div style="color:var(--text-secondary);font-size:0.85rem">Warnings</div>
-                                <div style="margin-top:4px;height:4px;background:var(--bg-tertiary);border-radius:2px"><div style="height:100%;width:${((issue_heatmap.warning||0)/heatTotal)*100}%;background:var(--accent-warning);border-radius:2px"></div></div>
+                                <div style="color:var(--text-primary);font-size:0.85rem;font-weight:600;margin-top:4px">Avisos</div>
+                                <div style="margin-top:6px;height:4px;background:var(--bg-tertiary);border-radius:2px"><div style="height:100%;width:${((issue_heatmap.warning||0)/heatTotal)*100}%;background:var(--accent-warning);border-radius:2px"></div></div>
                             </div>
                             <div style="padding:16px;border-radius:var(--radius-md);background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.2)">
                                 <div style="font-size:1.8rem;font-weight:800;color:#60a5fa">${issue_heatmap.info || 0}</div>
-                                <div style="color:var(--text-secondary);font-size:0.85rem">Info</div>
-                                <div style="margin-top:4px;height:4px;background:var(--bg-tertiary);border-radius:2px"><div style="height:100%;width:${((issue_heatmap.info||0)/heatTotal)*100}%;background:#60a5fa;border-radius:2px"></div></div>
+                                <div style="color:var(--text-primary);font-size:0.85rem;font-weight:600;margin-top:4px">Informativas</div>
+                                <div style="margin-top:6px;height:4px;background:var(--bg-tertiary);border-radius:2px"><div style="height:100%;width:${((issue_heatmap.info||0)/heatTotal)*100}%;background:#60a5fa;border-radius:2px"></div></div>
                             </div>
                             <div style="padding:16px;border-radius:var(--radius-md);background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.2)">
                                 <div style="font-size:1.8rem;font-weight:800;color:var(--accent-success)">${issue_heatmap.suggestion || 0}</div>
-                                <div style="color:var(--text-secondary);font-size:0.85rem">Sugestões</div>
+                                <div style="color:var(--text-primary);font-size:0.85rem;font-weight:600;margin-top:4px">Sugestões</div>
                                 <div style="margin-top:4px;height:4px;background:var(--bg-tertiary);border-radius:2px"><div style="height:100%;width:${((issue_heatmap.suggestion||0)/heatTotal)*100}%;background:var(--accent-success);border-radius:2px"></div></div>
                             </div>
                         </div>

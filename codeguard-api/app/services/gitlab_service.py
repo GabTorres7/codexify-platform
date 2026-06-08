@@ -24,6 +24,38 @@ class GitLabService:
     def _client(self) -> httpx.AsyncClient:
         return httpx.AsyncClient(headers=self._headers, timeout=30.0)
 
+    async def list_user_repos(self) -> list[dict]:
+        """Fetch all projects accessible by the authenticated user."""
+        all_repos = []
+        page = 1
+        async with self._client() as client:
+            while True:
+                resp = await client.get(
+                    f"{self._base}/projects",
+                    params={"membership": "true", "per_page": 100, "order_by": "updated_at", "page": page},
+                )
+                if resp.status_code == 401:
+                    raise GitPlatformError("gitlab", "Token inválido")
+                if not resp.is_success:
+                    raise GitPlatformError("gitlab", f"Erro ao buscar projetos: {resp.status_code}")
+                projects = resp.json()
+                if not projects:
+                    break
+                for p in projects:
+                    all_repos.append({
+                        "full_name": p.get("path_with_namespace", ""),
+                        "description": p.get("description") or "",
+                        "language": "",
+                        "private": p.get("visibility") == "private",
+                        "default_branch": p.get("default_branch", "main"),
+                        "stars": p.get("star_count", 0),
+                        "updated_at": p.get("last_activity_at", ""),
+                    })
+                if len(projects) < 100:
+                    break
+                page += 1
+        return all_repos
+
     async def validate_token(self, full_name: str) -> dict:
         """Validate token and return basic project info."""
         encoded = full_name.replace("/", "%2F")

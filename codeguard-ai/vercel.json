@@ -1,0 +1,43 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://codexify-api.onrender.com/api/:path*"
+    },
+    {
+      "source": "/health",
+      "destination": "https://codexify-api.onrender.com/health"
+    },
+    {
+      "source": "/",
+      "destination": "/landing.html"
+    },
+    {
+      "source": "/app",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/app/index.html",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/app/:path*",
+      "destination": "/:path*"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" }
+      ]
+    },
+    {
+      "source": "/(.*)\\.(js|css|png|ico|woff2?)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=86400, immutable" }
+      ]
+    }
+  ]
+}

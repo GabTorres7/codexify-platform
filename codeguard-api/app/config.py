@@ -66,6 +66,9 @@ class Settings(BaseSettings):
     # Public URL (used when registering webhooks on git platforms)
     public_api_url: str = "https://localhost:8000"
 
+    # Frontend URL (Vercel deploy URL — used for CORS and redirects)
+    frontend_url: str = ""
+
     # Stripe (optional — billing works without it using free plan switching)
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""

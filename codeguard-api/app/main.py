@@ -31,10 +31,15 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # CORS
+    # CORS — include frontend deploy URL automatically
+    origins = list(settings.allowed_origins)
+    if settings.frontend_url and settings.frontend_url not in origins:
+        origins.append(settings.frontend_url)
+    if settings.public_api_url and settings.public_api_url not in origins:
+        origins.append(settings.public_api_url)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.allowed_origins,
+        allow_origins=origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -70,6 +75,8 @@ def create_app() -> FastAPI:
 
     @app.get("/", include_in_schema=False)
     async def root():
+        if settings.frontend_url:
+            return RedirectResponse(url=settings.frontend_url)
         import pathlib
         landing = pathlib.Path(__file__).resolve().parent.parent.parent / "codeguard-ai" / "landing.html"
         if landing.is_file():

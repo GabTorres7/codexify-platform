@@ -1833,14 +1833,32 @@
         const mr = currentMR;
         if (!mr.diff || !mr.diff.length) { modalBody.innerHTML = '<div class="empty-state"><h3>Diff não disponível</h3><p>O diff será carregado após a análise da IA</p></div>'; return; }
 
+        // Merge issues into annotations for richer display
+        const issuesByFile = {};
+        (mr.issues || []).forEach(iss => {
+            const fp = iss.file_path || iss.filePath || '';
+            if (fp) {
+                if (!issuesByFile[fp]) issuesByFile[fp] = [];
+                issuesByFile[fp].push(iss);
+            }
+        });
+
         modalBody.innerHTML = mr.diff.map(f => {
             let h = '';
             const annotations = f.annotations || [];
             const annotMap = {};
             annotations.forEach(a => { annotMap[a.afterLine || a.after_line] = a; });
 
+            // Also map issues by line
+            const fileIssues = issuesByFile[f.file] || [];
+            fileIssues.forEach(iss => {
+                const line = parseInt(iss.line_ref || iss.lineRef || 0);
+                if (line && !annotMap[line]) {
+                    annotMap[line] = { type: iss.severity === 'critical' ? 'danger' : iss.severity === 'warning' ? 'warning' : 'info', text: iss.title + (iss.description ? ' — ' + iss.description : ''), suggestion: iss.suggestion || '' };
+                }
+            });
+
             if (f.lines && f.lines.length) {
-                // Has parsed lines — render each with annotations
                 f.lines.forEach(l => {
                     const cls = l.type === 'added' ? 'added' : l.type === 'removed' ? 'removed' : '';
                     h += `<div class="diff-line ${cls}"><span class="diff-line-number">${l.num}</span><span class="diff-line-content">${esc(l.content)}</span></div>`;
@@ -1848,34 +1866,32 @@
                     if (a) h += renderDiffAnnotation(a);
                 });
             } else if (f.diff_text) {
-                // Has raw diff text — parse and render
                 h = renderRawDiff(f.diff_text, annotMap);
-            } else if (annotations.length) {
-                // Only annotations, no code — try to fetch from description
-                const desc = mr.description || '';
-                if (desc.includes('+') || desc.includes('def ') || desc.includes('function')) {
-                    const lines = desc.split('\n');
-                    lines.forEach((line, idx) => {
-                        const num = idx + 1;
-                        h += `<div class="diff-line added"><span class="diff-line-number">${num}</span><span class="diff-line-content">${esc(line)}</span></div>`;
-                        const a = annotMap[num];
-                        if (a) h += renderDiffAnnotation(a);
-                    });
-                }
-                // Always show annotations at the end if nothing matched
-                if (!h) {
-                    annotations.forEach(a => { h += renderDiffAnnotation(a); });
-                }
+            } else if (annotations.length || fileIssues.length) {
+                const allAnns = [...annotations];
+                fileIssues.forEach(iss => {
+                    allAnns.push({ type: iss.severity === 'critical' ? 'danger' : iss.severity === 'warning' ? 'warning' : 'info', text: iss.title + (iss.description ? ' — ' + iss.description : ''), suggestion: iss.suggestion || '' });
+                });
+                allAnns.forEach(a => { h += renderDiffAnnotation(a); });
             }
 
-            return `<div class="diff-file"><div class="diff-file-header"><span>${icon('file-code', 14)} ${esc(f.file)}</span></div><div class="diff-content">${h}</div></div>`;
+            const fileStats = annotations.length || fileIssues.length;
+            const statsHtml = fileStats ? `<span class="diff-file-stats">${fileStats} anotação(ões)</span>` : '';
+
+            return `<div class="diff-file"><div class="diff-file-header"><span>${icon('file-code', 14)} ${esc(f.file)}</span>${statsHtml}</div><div class="diff-content">${h || '<div class="diff-empty">Sem alterações anotadas</div>'}</div></div>`;
         }).join('');
         refreshIcons();
     }
 
     function renderDiffAnnotation(a) {
-        const cls = a.type === 'danger' ? 'danger-annotation' : a.type === 'warning' ? 'warning-annotation' : '';
-        return `<div class="diff-annotation ${cls}"><div class="diff-annotation-icon">${a.type === 'danger' ? icon('alert-triangle', 14) : a.type === 'warning' ? icon('alert-circle', 14) : icon('info', 14)}</div><div class="diff-annotation-text">${esc(a.text)}</div></div>`;
+        const cls = a.type === 'danger' ? 'danger-annotation' : a.type === 'warning' ? 'warning-annotation' : 'info-annotation';
+        const icn = a.type === 'danger' ? icon('alert-triangle', 14) : a.type === 'warning' ? icon('alert-circle', 14) : icon('check-circle', 14);
+        const label = a.type === 'danger' ? 'Problema' : a.type === 'warning' ? 'Atenção' : 'Info';
+        let suggestion = '';
+        if (a.suggestion) {
+            suggestion = `<div class="diff-annotation-suggestion">${icon('lightbulb', 13)} <strong>Sugestão:</strong> ${esc(a.suggestion)}</div>`;
+        }
+        return `<div class="diff-annotation ${cls}"><div class="diff-annotation-header"><div class="diff-annotation-icon">${icn}</div><span class="diff-annotation-label">${label}</span></div><div class="diff-annotation-text">${esc(a.text)}</div>${suggestion}</div>`;
     }
 
     function renderRawDiff(diffText, annotMap) {

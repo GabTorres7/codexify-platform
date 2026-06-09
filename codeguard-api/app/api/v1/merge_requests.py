@@ -122,16 +122,41 @@ async def get_merge_request(
         raw_files = {}
         if isinstance(raw_response, dict):
             for fd in raw_response.get("_files_diff", []):
-                raw_files[fd.get("file", "")] = fd.get("diff_text", "")
+                fname = fd.get("file", "")
+                raw_files[fname] = fd.get("diff_text", "")
+                bare = fname.split("/")[-1]
+                if bare != fname:
+                    raw_files[bare] = fd.get("diff_text", "")
 
-        # Build diff list (files + their annotations + code)
+        def _find_diff_text(fp: str) -> str:
+            if fp in raw_files:
+                return raw_files[fp]
+            bare = fp.split("/")[-1]
+            if bare in raw_files:
+                return raw_files[bare]
+            for k, v in raw_files.items():
+                if k.endswith(fp) or fp.endswith(k):
+                    return v
+            return ""
+
+        # Build diff list — include ALL files from _files_diff
+        seen_files = set()
         for file_path, anns in annotations_by_file.items():
+            seen_files.add(file_path)
             diff.append({
                 "file": file_path,
                 "lines": [],
-                "diff_text": raw_files.get(file_path, ""),
+                "diff_text": _find_diff_text(file_path),
                 "annotations": anns,
             })
+        for fname, dtxt in raw_files.items():
+            if fname not in seen_files and "/" not in fname:
+                diff.append({
+                    "file": fname,
+                    "lines": [],
+                    "diff_text": dtxt,
+                    "annotations": [],
+                })
 
         rules = [
             {

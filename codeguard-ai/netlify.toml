@@ -1,0 +1,53 @@
+[build]
+  publish = "."
+
+# Landing page na raiz
+[[redirects]]
+  from = "/"
+  to = "/landing.html"
+  status = 200
+
+# App SPA
+[[redirects]]
+  from = "/app"
+  to = "/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/app/index.html"
+  to = "/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/app/*"
+  to = "/:splat"
+  status = 200
+
+# Proxy API para o Render
+[[redirects]]
+  from = "/api/*"
+  to = "https://codexify-api.onrender.com/api/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/health"
+  to = "https://codexify-api.onrender.com/health"
+  status = 200
+  force = true
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+
+[[headers]]
+  for = "/*.js"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
+
+[[headers]]
+  for = "/*.css"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"

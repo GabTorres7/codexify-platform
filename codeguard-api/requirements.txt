@@ -7,7 +7,7 @@ python-multipart==0.0.18
 python-dotenv==1.0.1
 
 # Database
-supabase==2.10.0
+supabase==2.29.0
 asyncpg==0.30.0
 
 # Auth & Security

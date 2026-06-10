@@ -1307,8 +1307,8 @@
         circLabel.textContent = 'Analisando...';
         let done = 0;
 
-        for (let poll = 0; poll < 90; poll++) {
-            await new Promise(r => setTimeout(r, 2000));
+        for (let poll = 0; poll < 180; poll++) {
+            await new Promise(r => setTimeout(r, 1000));
             let allDone = true;
 
             for (const job of jobs) {
@@ -1319,28 +1319,34 @@
                     const row = $('bf-' + job.idx);
 
                     if (d.status === 'completed') {
-                        job.status = 'completed'; job.score = d.ai_score; done++;
+                        job.status = 'completed'; job.score = d.ai_score; job.progress = 100; done++;
                         const g = AnalysisEngine.getScoreGrade(d.ai_score);
                         row.classList.add('completed');
                         row.children[0].innerHTML = icon('check-circle', 16);
                         row.querySelector('.file-status').innerHTML = '<strong style="color:' + g.color + '">' + d.ai_score + '/100</strong>';
                     } else if (d.status === 'failed') {
-                        job.status = 'failed'; done++;
+                        job.status = 'failed'; job.progress = 100; done++;
                         row.classList.add('failed');
                         row.children[0].innerHTML = icon('x-circle', 16);
                         row.querySelector('.file-status').textContent = 'falhou';
                         row.querySelector('.file-status').style.color = 'var(--accent-danger)';
                     } else {
                         allDone = false;
-                        row.querySelector('.file-status').textContent = 'analisando...';
+                        job.progress = d.progress || 0;
+                        const lbl = d.progress_label || 'analisando...';
+                        row.querySelector('.file-status').textContent = lbl;
                         row.querySelector('.file-status').style.color = 'var(--accent-warning)';
                     }
                 } catch (_) { allDone = false; }
             }
 
-            const pct = 20 + (done / pending.length) * 80;
+            // Calculate total progress from all jobs (each contributes proportionally)
+            const totalProgress = pending.reduce((sum, j) => sum + (j.progress || 0), 0);
+            const avgProgress = totalProgress / pending.length;
+            const pct = 20 + (avgProgress / 100) * 80;
             setPct(pct);
-            circTitle.textContent = done + ' de ' + pending.length + ' concluído(s)';
+            circLabel.textContent = done < pending.length ? (jobs.find(j => j.progress > 0 && j.progress < 100) || {}).progress_label || 'Analisando...' : 'Finalizando...';
+            circTitle.textContent = done < pending.length ? 'IA analisando ' + pending.length + ' arquivo(s)...' : done + ' de ' + pending.length + ' concluído(s)';
 
             if (allDone) break;
         }

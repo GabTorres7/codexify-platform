@@ -1370,12 +1370,15 @@
         clearInterval(countInterval);
         clearInterval(labelInterval);
 
+        // Mostra 100% por 1s antes de exibir resultado
+        setPct(100);
+        circLabel.textContent = 'Análise concluída!';
+        await new Promise(r => setTimeout(r, 1000));
+
         // Phase 3: Done — show results
         const ok = jobs.filter(j => j.status === 'completed');
         const fail = jobs.filter(j => j.status === 'failed');
         const avg = ok.length ? Math.round(ok.reduce((s, j) => s + (j.score || 0), 0) / ok.length) : 0;
-
-        setPct(100);
 
         if (ok.length) {
             const g = AnalysisEngine.getScoreGrade(avg);
@@ -2596,20 +2599,23 @@
                 _updateProgressBar(100);
                 if (fill) fill.style.background = 'var(--accent-success)';
                 if (label) label.textContent = 'Análise concluída!';
-                $('upSubmit').disabled = false;
-                $('upSubmit').textContent = 'Analisar com IA';
-                toast('Análise concluída! Score: ' + data.ai_score);
 
-                const g = AnalysisEngine.getScoreGrade(data.ai_score);
-                $('upResult').innerHTML = `
-                    <div class="card stagger-in">
-                        <div class="card-header"><span class="card-title">Resultado</span><span class="card-badge" style="background:${g.color}20;color:${g.color}">${g.label}</span></div>
-                        <div class="card-body" style="padding:24px;text-align:center">
-                            <div class="score-circle" style="--score-color:${g.color};--score-pct:${data.ai_score};color:${g.color};margin:0 auto 16px">${data.ai_score}</div>
-                            <p style="color:var(--text-secondary)">${g.description}</p>
-                            <button class="btn btn-primary" style="margin-top:16px" onclick="document.querySelector('[data-page=merge-requests]').click()">Ver Detalhes</button>
-                        </div>
-                    </div>`;
+                setTimeout(() => {
+                    $('upSubmit').disabled = false;
+                    $('upSubmit').textContent = 'Analisar com IA';
+                    toast('Análise concluída! Score: ' + data.ai_score);
+
+                    const g = AnalysisEngine.getScoreGrade(data.ai_score);
+                    $('upResult').innerHTML = `
+                        <div class="card stagger-in">
+                            <div class="card-header"><span class="card-title">Resultado</span><span class="card-badge" style="background:${g.color}20;color:${g.color}">${g.label}</span></div>
+                            <div class="card-body" style="padding:24px;text-align:center">
+                                <div class="score-circle" style="--score-color:${g.color};--score-pct:${data.ai_score};color:${g.color};margin:0 auto 16px">${data.ai_score}</div>
+                                <p style="color:var(--text-secondary)">${g.description}</p>
+                                <button class="btn btn-primary" style="margin-top:16px" onclick="document.querySelector('[data-page=merge-requests]').click()">Ver Detalhes</button>
+                            </div>
+                        </div>`;
+                }, 1000);
             } else if (data.status === 'failed') {
                 done = true;
                 clearInterval(countInterval);
@@ -2622,7 +2628,7 @@
                 toast('Análise falhou', 'error');
             }
         };
-        evtSource.onerror = () => { clearInterval(simulateInterval); evtSource.close(); };
+        evtSource.onerror = () => { done = true; clearInterval(countInterval); clearInterval(labelInterval); evtSource.close(); };
     }
 
     // ================================================================

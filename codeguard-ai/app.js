@@ -1902,35 +1902,139 @@
     }
 
     function exportAnalysisReport(mr) {
+        if (typeof html2pdf === 'undefined') { toast('Biblioteca PDF não carregou. Recarregue a página.', 'error'); return; }
+        toast('Gerando PDF...');
         const g = AnalysisEngine.getScoreGrade(mr.aiScore);
         const cats = mr.analysisCategories || {};
-        let md = `# Relatório de Análise — ${mr.title}\n\n`;
-        md += `**Score:** ${mr.aiScore}/100 (${g.label})\n`;
-        md += `**Branch:** ${mr.branch} → ${mr.targetBranch}\n`;
-        md += `**Data:** ${new Date().toLocaleDateString('pt-BR')}\n\n`;
-        if (Object.keys(cats).length) {
-            md += `## Categorias\n| Categoria | Score |\n|---|---|\n`;
-            Object.entries(cats).forEach(([k,v]) => { md += `| ${AnalysisEngine.getCategoryLabel(k)} | ${v}/100 |\n`; });
-            md += '\n';
+        const hasCats = Object.keys(cats).length > 0;
+        const sevColors = { critical: '#f87171', danger: '#f87171', warning: '#fbbf24', info: '#60a5fa', suggestion: '#34d399' };
+
+        // Build category bars
+        let catsHtml = '';
+        if (hasCats) {
+            catsHtml = '<div style="margin-bottom:24px"><h3 style="font-size:1rem;margin-bottom:12px;color:#e2e8f0">Categorias</h3>' +
+                Object.entries(cats).map(([k, v]) => {
+                    const label = AnalysisEngine.getCategoryLabel(k);
+                    const barColor = v >= 65 ? '#34d399' : v >= 50 ? '#fbbf24' : '#f87171';
+                    return `<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;font-size:0.82rem;margin-bottom:4px;color:#cbd5e1"><span>${label}</span><span style="color:${barColor};font-weight:700">${v}/100</span></div><div style="background:#1e293b;border-radius:6px;height:8px;overflow:hidden"><div style="background:${barColor};height:100%;width:${v}%;border-radius:6px"></div></div></div>`;
+                }).join('') + '</div>';
         }
-        if (mr.issues.length) {
-            md += `## Issues (${mr.issues.length})\n`;
-            mr.issues.forEach(i => {
-                md += `### [${(i.severity||'info').toUpperCase()}] ${i.title||''}\n`;
-                if (i.file_path || i.file) md += `**Arquivo:** ${i.file_path || i.file}${i.line_ref ? ':'+i.line_ref : ''}\n`;
-                if (i.description) md += `${i.description}\n`;
-                if (i.suggestion) md += `> **Sugestão:** ${i.suggestion}\n`;
-                md += '\n';
-            });
+
+        // Build issues list
+        let issuesHtml = '';
+        if (mr.issues && mr.issues.length) {
+            issuesHtml = '<div style="margin-bottom:24px"><h3 style="font-size:1rem;margin-bottom:12px;color:#e2e8f0">Issues (' + mr.issues.length + ')</h3>' +
+                mr.issues.map(i => {
+                    const sev = i.severity || 'info';
+                    const col = sevColors[sev] || '#60a5fa';
+                    const file = i.file_path || i.file || '';
+                    return `<div style="background:#1e293b;border-left:3px solid ${col};border-radius:6px;padding:12px 14px;margin-bottom:8px">` +
+                        `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><span style="background:${col}22;color:${col};padding:2px 8px;border-radius:10px;font-size:0.7rem;font-weight:700;text-transform:uppercase">${sev}</span><span style="font-weight:600;font-size:0.85rem;color:#e2e8f0">${esc(i.title || '')}</span></div>` +
+                        (file ? `<div style="font-size:0.75rem;color:#64748b;margin-bottom:4px">${esc(file)}${i.line_ref ? ':' + i.line_ref : ''}</div>` : '') +
+                        (i.description ? `<div style="font-size:0.82rem;color:#94a3b8;margin-bottom:4px">${esc(i.description)}</div>` : '') +
+                        (i.suggestion ? `<div style="font-size:0.78rem;color:#34d399;background:#34d39910;padding:8px 10px;border-radius:4px;border-left:2px solid #34d399;margin-top:6px"><strong>Sugestão:</strong> ${esc(i.suggestion)}</div>` : '') +
+                        '</div>';
+                }).join('') + '</div>';
         }
-        md += `---\n*Gerado por Codexify AI*\n`;
-        const blob = new Blob([md], { type: 'text/markdown' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = `codexify-report-${mr.title.replace(/[^a-z0-9]/gi, '-').slice(0, 40)}.md`;
-        a.click();
-        URL.revokeObjectURL(a.href);
-        toast('Relatório exportado!');
+
+        // Build diff section
+        let diffHtml = '';
+        if (mr.diff && mr.diff.length) {
+            diffHtml = '<div style="margin-bottom:24px"><h3 style="font-size:1rem;margin-bottom:12px;color:#e2e8f0">Diff</h3>' +
+                mr.diff.map(f => {
+                    const anns = f.annotations || [];
+                    const annotMap = {};
+                    anns.forEach(a => { annotMap[a.afterLine || a.after_line] = a; });
+                    const fileIssues = (mr.issues || []).filter(i => (i.file_path || i.file || '') === f.file);
+                    fileIssues.forEach(iss => {
+                        const line = parseInt(iss.line_ref || iss.lineRef || 0);
+                        if (!line) return;
+                        if (annotMap[line]) { if (iss.suggestion && !annotMap[line].suggestion) annotMap[line].suggestion = iss.suggestion; }
+                        else { annotMap[line] = { type: iss.severity === 'critical' ? 'danger' : iss.severity === 'warning' ? 'warning' : 'info', text: iss.title + (iss.description ? ' — ' + iss.description : ''), suggestion: iss.suggestion || '' }; }
+                    });
+
+                    let linesHtml = '';
+                    const diffText = f.diff_text || '';
+                    if (diffText) {
+                        const dLines = diffText.split('\n');
+                        let ln = 0;
+                        for (const dl of dLines) {
+                            if (dl.startsWith('diff --git') || dl.startsWith('---') || dl.startsWith('+++') || dl.startsWith('@@')) {
+                                linesHtml += `<div style="background:#334155;color:#64748b;padding:2px 12px;font-size:0.75rem">${esc(dl)}</div>`;
+                                if (dl.startsWith('@@')) { const m = dl.match(/@@ .+\+(\d+)/); if (m) ln = parseInt(m[1]) - 1; }
+                                continue;
+                            }
+                            ln++;
+                            const isAdd = dl.startsWith('+'), isRem = dl.startsWith('-');
+                            const content = isAdd || isRem ? dl.slice(1) : dl;
+                            const ann = annotMap[ln];
+                            let bg = isAdd ? 'rgba(52,211,153,0.08)' : isRem ? 'rgba(248,113,113,0.08)' : 'transparent';
+                            if (ann) bg = ann.type === 'danger' ? 'rgba(248,113,113,0.13)' : ann.type === 'warning' ? 'rgba(251,191,36,0.11)' : 'rgba(96,165,250,0.09)';
+                            linesHtml += `<div style="display:flex;background:${bg};font-size:0.75rem;line-height:1.6"><span style="width:40px;text-align:right;padding-right:8px;color:#475569;user-select:none;flex-shrink:0">${ln}</span><span style="flex:1;white-space:pre-wrap;word-break:break-all">${esc(content)}</span></div>`;
+                            if (ann) {
+                                const acol = ann.type === 'danger' ? '#f87171' : ann.type === 'warning' ? '#fbbf24' : '#60a5fa';
+                                const aLabel = ann.type === 'danger' ? 'PROBLEMA' : ann.type === 'warning' ? 'ATENÇÃO' : 'INFO';
+                                linesHtml += `<div style="background:${acol}0d;border-left:3px solid ${acol};padding:8px 12px 8px 50px;font-size:0.78rem"><span style="color:${acol};font-weight:700;font-size:0.7rem">${aLabel}</span> <span style="color:#94a3b8">${esc(ann.text || '')}</span>`;
+                                if (ann.suggestion) linesHtml += `<div style="color:#34d399;margin-top:4px;font-size:0.75rem"><strong>Sugestão:</strong> ${esc(ann.suggestion)}</div>`;
+                                linesHtml += '</div>';
+                            }
+                        }
+                    }
+                    return `<div style="background:#0f172a;border:1px solid #1e293b;border-radius:8px;overflow:hidden;margin-bottom:12px"><div style="background:#1e293b;padding:8px 14px;font-size:0.82rem;font-weight:600;color:#e2e8f0">${esc(f.file)}</div><div style="font-family:'JetBrains Mono',monospace;color:#e2e8f0">${linesHtml || '<div style="padding:12px;color:#475569">Sem código</div>'}</div></div>`;
+                }).join('') + '</div>';
+        }
+
+        // Build rules table
+        let rulesHtml = '';
+        if (mr.rules && mr.rules.length) {
+            const rIcons = { pass: '✓', fail: '✗', warn: '⚠' };
+            const rColors = { pass: '#34d399', fail: '#f87171', warn: '#fbbf24' };
+            rulesHtml = '<div style="margin-bottom:24px"><h3 style="font-size:1rem;margin-bottom:12px;color:#e2e8f0">Regras</h3>' +
+                mr.rules.map(r => {
+                    const st = r.status || 'warn';
+                    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:#1e293b;border-radius:6px;margin-bottom:6px"><span style="color:${rColors[st] || '#fbbf24'};font-weight:700;font-size:1.1rem;width:20px;text-align:center">${rIcons[st] || '⚠'}</span><div><div style="font-weight:600;font-size:0.85rem;color:#e2e8f0">${esc(r.name || r.rule_name || '')}</div>${r.description || r.desc ? `<div style="font-size:0.78rem;color:#64748b">${esc(r.description || r.desc)}</div>` : ''}</div></div>`;
+                }).join('') + '</div>';
+        }
+
+        // Assemble full report
+        const container = document.createElement('div');
+        container.style.cssText = 'position:fixed;left:-9999px;top:0;width:210mm;background:#0f172a;color:#e2e8f0;font-family:Inter,sans-serif;padding:28px 24px;';
+        container.innerHTML =
+            `<div style="text-align:center;margin-bottom:28px">` +
+                `<div style="font-size:1.6rem;font-weight:800;background:linear-gradient(135deg,#818cf8,#6366f1);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:4px">Codexify</div>` +
+                `<div style="font-size:0.75rem;color:#475569;letter-spacing:2px;text-transform:uppercase">Relatório de Análise</div>` +
+            `</div>` +
+            `<div style="background:#1e293b;border-radius:10px;padding:20px;margin-bottom:24px">` +
+                `<h2 style="font-size:1.15rem;margin-bottom:12px;color:#e2e8f0">${esc(mr.title)}</h2>` +
+                `<div style="display:flex;gap:20px;flex-wrap:wrap;font-size:0.82rem;color:#94a3b8;margin-bottom:16px">` +
+                    `<span>Branch: <strong style="color:#818cf8">${esc(mr.branch)} → ${esc(mr.targetBranch)}</strong></span>` +
+                    `<span>Autor: <strong>${esc(mr.author?.name || '')}</strong></span>` +
+                    `<span>Data: <strong>${new Date().toLocaleDateString('pt-BR')}</strong></span>` +
+                `</div>` +
+                `<div style="display:flex;align-items:center;gap:20px">` +
+                    `<div style="width:80px;height:80px;border-radius:50%;border:4px solid ${g.color};display:flex;align-items:center;justify-content:center;font-size:1.8rem;font-weight:800;color:${g.color};flex-shrink:0">${mr.aiScore ?? '—'}</div>` +
+                    `<div><div style="font-size:1rem;font-weight:700;color:${g.color};margin-bottom:4px">${g.label}</div><div style="font-size:0.82rem;color:#94a3b8">${g.description}</div></div>` +
+                `</div>` +
+            `</div>` +
+            catsHtml + issuesHtml + diffHtml + rulesHtml +
+            `<div style="text-align:center;padding-top:16px;border-top:1px solid #1e293b;font-size:0.72rem;color:#475569">Gerado por Codexify AI — ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}</div>`;
+
+        document.body.appendChild(container);
+
+        html2pdf().set({
+            margin: [8, 6, 8, 6],
+            filename: `codexify-report-${mr.title.replace(/[^a-z0-9]/gi, '-').slice(0, 40)}.pdf`,
+            image: { type: 'jpeg', quality: 0.95 },
+            html2canvas: { scale: 2, useCORS: true, backgroundColor: '#0f172a' },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+            pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
+        }).from(container).save().then(() => {
+            document.body.removeChild(container);
+            toast('PDF exportado!');
+        }).catch(() => {
+            document.body.removeChild(container);
+            toast('Erro ao gerar PDF', 'error');
+        });
     }
 
     async function reanalyzeCurrentMR(mr) {
@@ -1962,11 +2066,14 @@
             const annotMap = {};
             annotations.forEach(a => { annotMap[a.afterLine || a.after_line] = a; });
 
-            // Also map issues by line
+            // Also map issues by line — merge suggestion into existing annotations
             const fileIssues = issuesByFile[f.file] || [];
             fileIssues.forEach(iss => {
                 const line = parseInt(iss.line_ref || iss.lineRef || 0);
-                if (line && !annotMap[line]) {
+                if (!line) return;
+                if (annotMap[line]) {
+                    if (iss.suggestion && !annotMap[line].suggestion) annotMap[line].suggestion = iss.suggestion;
+                } else {
                     annotMap[line] = { type: iss.severity === 'critical' ? 'danger' : iss.severity === 'warning' ? 'warning' : 'info', text: iss.title + (iss.description ? ' — ' + iss.description : ''), suggestion: iss.suggestion || '' };
                 }
             });
@@ -1974,7 +2081,8 @@
             if (f.lines && f.lines.length) {
                 f.lines.forEach(l => {
                     const cls = l.type === 'added' ? 'added' : l.type === 'removed' ? 'removed' : '';
-                    h += `<div class="diff-line ${cls}"><span class="diff-line-number">${l.num}</span><span class="diff-line-content">${esc(l.content)}</span></div>`;
+                    const sev = annotMap[l.num] ? ` line-${annotMap[l.num].type}` : '';
+                    h += `<div class="diff-line ${cls}${sev}"><span class="diff-line-number">${l.num}</span><span class="diff-line-content">${esc(l.content)}</span></div>`;
                     const a = annotMap[l.num];
                     if (a) h += renderDiffAnnotation(a);
                 });
@@ -2028,7 +2136,8 @@
             lineNum++;
             const type = line.startsWith('+') ? 'added' : line.startsWith('-') ? 'removed' : '';
             const content = line.startsWith('+') || line.startsWith('-') ? line.slice(1) : line;
-            h += `<div class="diff-line ${type}"><span class="diff-line-number">${lineNum}</span><span class="diff-line-content">${esc(content)}</span></div>`;
+            const sev = annotMap[lineNum] ? ` line-${annotMap[lineNum].type}` : '';
+            h += `<div class="diff-line ${type}${sev}"><span class="diff-line-number">${lineNum}</span><span class="diff-line-content">${esc(content)}</span></div>`;
             const a = annotMap[lineNum];
             if (a) h += renderDiffAnnotation(a);
         }
@@ -2040,7 +2149,8 @@
         const lines = content.split('\n');
         for (let i = 0; i < lines.length; i++) {
             const lineNum = i + 1;
-            h += `<div class="diff-line added"><span class="diff-line-number">${lineNum}</span><span class="diff-line-content">${esc(lines[i])}</span></div>`;
+            const sev = annotMap[lineNum] ? ` line-${annotMap[lineNum].type}` : '';
+            h += `<div class="diff-line added${sev}"><span class="diff-line-number">${lineNum}</span><span class="diff-line-content">${esc(lines[i])}</span></div>`;
             const a = annotMap[lineNum];
             if (a) h += renderDiffAnnotation(a);
         }

@@ -1653,6 +1653,11 @@ body {
 .diff-annotation.danger-annotation .diff-annotation-icon { background: var(--gradient-danger); }
 .diff-annotation.danger-annotation .diff-annotation-label { color: var(--accent-danger); }
 
+/* Severity-based line coloring */
+.diff-line.line-danger { background: rgba(248, 113, 113, 0.13) !important; }
+.diff-line.line-warning { background: rgba(251, 191, 36, 0.11) !important; }
+.diff-line.line-info { background: rgba(96, 165, 250, 0.09) !important; }
+
 .diff-file-stats {
     font-size: 0.75rem;
     color: var(--text-tertiary);

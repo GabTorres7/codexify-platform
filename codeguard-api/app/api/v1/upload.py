@@ -128,6 +128,24 @@ async def upload_quick_analysis(
             detail="Envie um arquivo ou cole o diff no campo diff_text.",
         )
 
+    # Wrap pasted raw code in unified diff format if needed
+    if raw_diff and not raw_diff.strip().startswith("diff --git"):
+        code = raw_diff
+        if len(code) > 8000:
+            code = code[:8000] + "\n... [truncado para análise]"
+        code_lines = code.splitlines()
+        diff_lines = [f"+{line}" for line in code_lines]
+        fname = "uploaded_code.py"
+        if file and file.filename:
+            fname = file.filename
+        raw_diff = (
+            f"diff --git a/{fname} b/{fname}\n"
+            f"--- /dev/null\n"
+            f"+++ b/{fname}\n"
+            f"@@ -0,0 +1,{len(code_lines)} @@\n"
+            + "\n".join(diff_lines)
+        )
+
     if not mr_title.strip():
         raise HTTPException(status_code=400, detail="mr_title é obrigatório.")
 

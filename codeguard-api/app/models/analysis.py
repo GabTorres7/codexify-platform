@@ -29,6 +29,7 @@ class DiffAnnotationOut(BaseModel):
 class FileDiffOut(BaseModel):
     file: str
     lines: list[DiffLineOut]
+    diff_text: str = ""
     annotations: list[DiffAnnotationOut]
 
 

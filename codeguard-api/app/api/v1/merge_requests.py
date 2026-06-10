@@ -143,6 +143,7 @@ async def get_merge_request(
         seen_files = set()
         for file_path, anns in annotations_by_file.items():
             seen_files.add(file_path)
+            seen_files.add(file_path.split("/")[-1])
             diff.append({
                 "file": file_path,
                 "lines": [],
@@ -150,9 +151,10 @@ async def get_merge_request(
                 "annotations": anns,
             })
         for fname, dtxt in raw_files.items():
-            if fname not in seen_files and "/" not in fname:
+            bare = fname.split("/")[-1]
+            if bare not in seen_files and fname not in seen_files:
                 diff.append({
-                    "file": fname,
+                    "file": bare if "/" in fname else fname,
                     "lines": [],
                     "diff_text": dtxt,
                     "annotations": [],

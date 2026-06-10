@@ -1979,7 +1979,11 @@
                     if (a) h += renderDiffAnnotation(a);
                 });
             } else if (f.diff_text) {
-                h = renderRawDiff(f.diff_text, annotMap);
+                if (f.diff_text.trimStart().startsWith('diff --git') || f.diff_text.includes('\n@@')) {
+                    h = renderRawDiff(f.diff_text, annotMap);
+                } else {
+                    h = renderRawFileContent(f.diff_text, annotMap);
+                }
             } else if (annotations.length || fileIssues.length) {
                 const allAnns = [...annotations];
                 fileIssues.forEach(iss => {
@@ -2025,6 +2029,18 @@
             const type = line.startsWith('+') ? 'added' : line.startsWith('-') ? 'removed' : '';
             const content = line.startsWith('+') || line.startsWith('-') ? line.slice(1) : line;
             h += `<div class="diff-line ${type}"><span class="diff-line-number">${lineNum}</span><span class="diff-line-content">${esc(content)}</span></div>`;
+            const a = annotMap[lineNum];
+            if (a) h += renderDiffAnnotation(a);
+        }
+        return h;
+    }
+
+    function renderRawFileContent(content, annotMap) {
+        let h = '';
+        const lines = content.split('\n');
+        for (let i = 0; i < lines.length; i++) {
+            const lineNum = i + 1;
+            h += `<div class="diff-line added"><span class="diff-line-number">${lineNum}</span><span class="diff-line-content">${esc(lines[i])}</span></div>`;
             const a = annotMap[lineNum];
             if (a) h += renderDiffAnnotation(a);
         }

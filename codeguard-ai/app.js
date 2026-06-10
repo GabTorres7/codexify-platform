@@ -2036,32 +2036,47 @@
         // ── Open clean popup window for reliable PDF capture ──
         const fname = `codexify-report-${mr.title.replace(/[^a-z0-9]/gi, '-').slice(0, 40)}.pdf`;
         const safeBody = bodyHtml.replace(/<\/script>/g, '<\\/script>');
-        const win = window.open('', '_blank', 'width=820,height=700');
+        const win = window.open('', '_blank');
         if (!win) { toast('Popup bloqueado pelo navegador. Permita popups para este site.', 'error'); return; }
         toast('Gerando PDF na nova aba...');
-        win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Codexify — Relatório</title>' +
-            '<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.2/html2pdf.bundle.min.js"><\/script>' +
-            '</head><body style="background:#0f172a;color:#e2e8f0;font-family:Inter,Arial,Helvetica,sans-serif;padding:32px 28px;margin:0;width:794px;">' +
-            safeBody +
-            '<script>' +
-            'window.onload=function(){' +
-                'document.title="Gerando PDF...";' +
-                'html2pdf().set({' +
-                    'margin:[10,8,10,8],' +
-                    'filename:"' + fname.replace(/"/g, '') + '",' +
-                    'image:{type:"jpeg",quality:0.98},' +
-                    'html2canvas:{scale:2,backgroundColor:"#0f172a",logging:false},' +
-                    'jsPDF:{unit:"mm",format:"a4",orientation:"portrait"},' +
-                    'pagebreak:{mode:["css","legacy"]}' +
-                '}).from(document.body).save().then(function(){' +
-                    'document.title="PDF salvo!";' +
-                    'setTimeout(function(){window.close()},2000);' +
-                '}).catch(function(e){' +
-                    'document.title="Erro - use Ctrl+P para salvar como PDF";' +
-                    'console.error(e);' +
-                '});' +
-            '};' +
-            '<\/script></body></html>');
+
+        win.document.open();
+        win.document.write([
+            '<!DOCTYPE html><html><head><meta charset="UTF-8">',
+            '<title>Codexify — Gerando PDF...</title>',
+            '<style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0f172a;color:#e2e8f0;font-family:Inter,Arial,Helvetica,sans-serif;padding:32px 28px;width:794px}</style>',
+            '</head><body>',
+            safeBody,
+            '<div id="pdfStatus" style="position:fixed;bottom:0;left:0;right:0;background:#1e293b;color:#818cf8;text-align:center;padding:12px;font-size:0.9rem;font-weight:600;z-index:9999">Carregando biblioteca PDF...</div>',
+            '<script>',
+            'function gerarPDF(){',
+                'document.getElementById("pdfStatus").textContent="Capturando relatório...";',
+                'var el=document.getElementById("pdfStatus");',
+                'el.style.display="none";',
+                'setTimeout(function(){',
+                    'html2pdf().set({',
+                        'margin:[10,8,10,8],',
+                        'filename:"', fname.replace(/"/g, ''), '",',
+                        'image:{type:"jpeg",quality:0.98},',
+                        'html2canvas:{scale:2,backgroundColor:"#0f172a",logging:false},',
+                        'jsPDF:{unit:"mm",format:"a4",orientation:"portrait"},',
+                        'pagebreak:{mode:["css","legacy"]}',
+                    '}).from(document.body).save().then(function(){',
+                        'document.title="PDF salvo!";',
+                        'setTimeout(function(){window.close()},2000);',
+                    '}).catch(function(e){',
+                        'console.error("PDF error:",e);',
+                        'document.title="Erro ao gerar PDF";',
+                        'el.style.display="block";',
+                        'el.textContent="Erro ao gerar. Use Ctrl+P e salve como PDF.";',
+                        'el.style.color="#f87171";',
+                    '});',
+                '},500);',
+            '}',
+            '<\/script>',
+            '<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.2/html2pdf.bundle.min.js" onload="gerarPDF()"><\/script>',
+            '</body></html>',
+        ].join(''));
         win.document.close();
     }
 

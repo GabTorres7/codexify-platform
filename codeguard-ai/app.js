@@ -2033,38 +2033,36 @@
                 <div style="font-size:0.68rem;color:#475569">Gerado por <strong style="color:#818cf8">Codexify AI</strong> — ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}</div>
             </div>`;
 
-        // ── Render in iframe ──
-        const iframe = document.createElement('iframe');
-        iframe.style.cssText = 'position:fixed;top:0;left:0;width:810px;height:100px;z-index:99999;border:none;opacity:0;pointer-events:none;';
-        document.body.appendChild(iframe);
+        // ── Render and capture ──
+        // Close modal temporarily to avoid interference
+        const modalEl = document.querySelector('.modal-overlay');
+        if (modalEl) modalEl.style.display = 'none';
 
-        const iDoc = iframe.contentDocument || iframe.contentWindow.document;
-        iDoc.open();
-        iDoc.write(`<!DOCTYPE html><html><head><style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0f172a;color:#e2e8f0;font-family:Inter,Arial,Helvetica,sans-serif;padding:32px 28px;width:794px}</style></head><body>${bodyHtml}</body></html>`);
-        iDoc.close();
+        const el = document.createElement('div');
+        el.style.cssText = 'position:absolute;top:0;left:0;width:794px;z-index:99999;background:#0f172a;color:#e2e8f0;font-family:Inter,Arial,Helvetica,sans-serif;padding:32px 28px;';
+        el.innerHTML = bodyHtml;
+        document.body.appendChild(el);
+        window.scrollTo(0, 0);
 
-        // Resize iframe to full content height so html2canvas captures everything
         setTimeout(() => {
-            const fullH = iDoc.body.scrollHeight + 60;
-            iframe.style.height = fullH + 'px';
-
-            setTimeout(() => {
-                const scr = iDoc.createElement('script');
-                scr.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.2/html2pdf.bundle.min.js';
-                scr.onload = () => {
-                    iframe.contentWindow.html2pdf().set({
-                        margin: [10, 8, 10, 8],
-                        filename: `codexify-report-${mr.title.replace(/[^a-z0-9]/gi, '-').slice(0, 40)}.pdf`,
-                        image: { type: 'jpeg', quality: 0.98 },
-                        html2canvas: { scale: 2, backgroundColor: '#0f172a', logging: false, height: fullH, windowHeight: fullH },
-                        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                        pagebreak: { mode: ['css', 'legacy'] },
-                    }).from(iDoc.body).save().then(() => { iframe.remove(); toast('PDF exportado!'); }).catch(() => { iframe.remove(); toast('Erro ao gerar PDF', 'error'); });
-                };
-                scr.onerror = () => { iframe.remove(); toast('Erro ao carregar lib PDF', 'error'); };
-                iDoc.head.appendChild(scr);
-            }, 200);
-        }, 100);
+            html2pdf().set({
+                margin: [10, 8, 10, 8],
+                filename: `codexify-report-${mr.title.replace(/[^a-z0-9]/gi, '-').slice(0, 40)}.pdf`,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2, backgroundColor: '#0f172a', logging: false, scrollX: 0, scrollY: -window.scrollY },
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                pagebreak: { mode: ['css', 'legacy'] },
+            }).from(el).save().then(() => {
+                el.remove();
+                if (modalEl) modalEl.style.display = '';
+                toast('PDF exportado!');
+            }).catch((err) => {
+                console.error('PDF export error:', err);
+                el.remove();
+                if (modalEl) modalEl.style.display = '';
+                toast('Erro ao gerar PDF', 'error');
+            });
+        }, 500);
     }
 
     async function reanalyzeCurrentMR(mr) {

@@ -1902,8 +1902,7 @@
     }
 
     function exportAnalysisReport(mr) {
-        if (typeof html2pdf === 'undefined') { toast('Biblioteca PDF não carregou. Recarregue a página.', 'error'); return; }
-        toast('Gerando PDF — aguarde...');
+        toast('Gerando relatório...');
         const g = AnalysisEngine.getScoreGrade(mr.aiScore);
         const cats = mr.analysisCategories || {};
         const hasCats = Object.keys(cats).length > 0;
@@ -2033,51 +2032,36 @@
                 <div style="font-size:0.68rem;color:#475569">Gerado por <strong style="color:#818cf8">Codexify AI</strong> — ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}</div>
             </div>`;
 
-        // ── Open clean popup window for reliable PDF capture ──
-        const fname = `codexify-report-${mr.title.replace(/[^a-z0-9]/gi, '-').slice(0, 40)}.pdf`;
+        // ── Open popup with print-to-PDF (native browser, 100% reliable) ──
         const safeBody = bodyHtml.replace(/<\/script>/g, '<\\/script>');
         const win = window.open('', '_blank');
         if (!win) { toast('Popup bloqueado pelo navegador. Permita popups para este site.', 'error'); return; }
-        toast('Gerando PDF na nova aba...');
 
         win.document.open();
         win.document.write([
             '<!DOCTYPE html><html><head><meta charset="UTF-8">',
-            '<title>Codexify — Gerando PDF...</title>',
-            '<style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0f172a;color:#e2e8f0;font-family:Inter,Arial,Helvetica,sans-serif;padding:32px 28px;width:794px}</style>',
+            '<title>Codexify — Relatório de Análise</title>',
+            '<style>',
+            '*{margin:0;padding:0;box-sizing:border-box}',
+            'body{background:#0f172a;color:#e2e8f0;font-family:Inter,Arial,Helvetica,sans-serif;padding:32px 28px;max-width:900px;margin:0 auto}',
+            '@media print{',
+            '  body{-webkit-print-color-adjustment:exact!important;print-color-adjust:exact!important;color-adjust:exact!important;padding:16px 12px}',
+            '  .no-print{display:none!important}',
+            '  @page{margin:10mm 8mm;size:A4}',
+            '}',
+            '</style>',
             '</head><body>',
             safeBody,
-            '<div id="pdfStatus" style="position:fixed;bottom:0;left:0;right:0;background:#1e293b;color:#818cf8;text-align:center;padding:12px;font-size:0.9rem;font-weight:600;z-index:9999">Carregando biblioteca PDF...</div>',
-            '<script>',
-            'function gerarPDF(){',
-                'document.getElementById("pdfStatus").textContent="Capturando relatório...";',
-                'var el=document.getElementById("pdfStatus");',
-                'el.style.display="none";',
-                'setTimeout(function(){',
-                    'html2pdf().set({',
-                        'margin:[10,8,10,8],',
-                        'filename:"', fname.replace(/"/g, ''), '",',
-                        'image:{type:"jpeg",quality:0.98},',
-                        'html2canvas:{scale:2,backgroundColor:"#0f172a",logging:false},',
-                        'jsPDF:{unit:"mm",format:"a4",orientation:"portrait"},',
-                        'pagebreak:{mode:["css","legacy"]}',
-                    '}).from(document.body).save().then(function(){',
-                        'document.title="PDF salvo!";',
-                        'setTimeout(function(){window.close()},2000);',
-                    '}).catch(function(e){',
-                        'console.error("PDF error:",e);',
-                        'document.title="Erro ao gerar PDF";',
-                        'el.style.display="block";',
-                        'el.textContent="Erro ao gerar. Use Ctrl+P e salve como PDF.";',
-                        'el.style.color="#f87171";',
-                    '});',
-                '},500);',
-            '}',
-            '<\/script>',
-            '<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.2/html2pdf.bundle.min.js" onload="gerarPDF()"><\/script>',
+            '<div class="no-print" style="position:fixed;bottom:0;left:0;right:0;background:linear-gradient(135deg,#1e293b,#0f172a);border-top:1px solid #334155;text-align:center;padding:14px;z-index:9999">',
+            '<button onclick="window.print()" style="background:#818cf8;color:#fff;border:none;padding:10px 28px;border-radius:8px;font-weight:700;cursor:pointer;font-size:0.9rem;letter-spacing:0.3px">📥 Salvar como PDF</button>',
+            '<span style="display:block;margin-top:6px;font-size:0.72rem;color:#64748b">Na janela de impressão, selecione <strong style=color:#94a3b8>Salvar como PDF</strong> e clique em Salvar</span>',
+            '</div>',
+            '<div style="height:60px" class="no-print"></div>',
+            '<script>setTimeout(function(){window.print()},800)<\/script>',
             '</body></html>',
         ].join(''));
         win.document.close();
+        toast('Relatório aberto — salve como PDF na janela de impressão.');
     }
 
     async function reanalyzeCurrentMR(mr) {

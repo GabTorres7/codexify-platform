@@ -1996,12 +1996,29 @@
                 }).join('') + '</div>';
         }
 
-        // Assemble full report
+        // Build rules summary counts for PDF
+        let rulesSummaryHtml = '';
+        if (mr.rules && mr.rules.length) {
+            const rc = AnalysisEngine.countRules(mr.rules.map(r => ({ status: r.status || 'warn' })));
+            rulesSummaryHtml = `<div style="display:flex;gap:16px;margin-bottom:16px">` +
+                `<div style="flex:1;background:#1e293b;border-radius:8px;padding:14px;text-align:center"><div style="font-size:1.5rem;font-weight:800;color:#34d399">${rc.pass}</div><div style="font-size:0.75rem;color:#94a3b8">Aprovadas</div></div>` +
+                `<div style="flex:1;background:#1e293b;border-radius:8px;padding:14px;text-align:center"><div style="font-size:1.5rem;font-weight:800;color:#f87171">${rc.fail}</div><div style="font-size:0.75rem;color:#94a3b8">Reprovadas</div></div>` +
+                `<div style="flex:1;background:#1e293b;border-radius:8px;padding:14px;text-align:center"><div style="font-size:1.5rem;font-weight:800;color:#fbbf24">${rc.warn}</div><div style="font-size:0.75rem;color:#94a3b8">Atenção</div></div>` +
+            `</div>`;
+        }
+
+        // Overlay to cover UI while rendering
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#0f172a;display:flex;align-items:center;justify-content:center;color:#818cf8;font-size:1.2rem;font-family:Inter,sans-serif';
+        overlay.textContent = 'Gerando PDF...';
+        document.body.appendChild(overlay);
+
+        // Container must be on-screen for html2canvas to capture
         const container = document.createElement('div');
-        container.style.cssText = 'position:fixed;left:-9999px;top:0;width:210mm;background:#0f172a;color:#e2e8f0;font-family:Inter,sans-serif;padding:28px 24px;';
+        container.style.cssText = 'position:absolute;top:0;left:0;width:794px;background:#0f172a;color:#e2e8f0;font-family:Inter,sans-serif;padding:28px 24px;z-index:99998;';
         container.innerHTML =
             `<div style="text-align:center;margin-bottom:28px">` +
-                `<div style="font-size:1.6rem;font-weight:800;background:linear-gradient(135deg,#818cf8,#6366f1);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:4px">Codexify</div>` +
+                `<div style="font-size:1.6rem;font-weight:800;color:#818cf8;margin-bottom:4px">Codexify</div>` +
                 `<div style="font-size:0.75rem;color:#475569;letter-spacing:2px;text-transform:uppercase">Relatório de Análise</div>` +
             `</div>` +
             `<div style="background:#1e293b;border-radius:10px;padding:20px;margin-bottom:24px">` +
@@ -2016,25 +2033,31 @@
                     `<div><div style="font-size:1rem;font-weight:700;color:${g.color};margin-bottom:4px">${g.label}</div><div style="font-size:0.82rem;color:#94a3b8">${g.description}</div></div>` +
                 `</div>` +
             `</div>` +
-            catsHtml + issuesHtml + diffHtml + rulesHtml +
+            catsHtml + issuesHtml + diffHtml +
+            (rulesHtml ? `<div style="margin-bottom:24px"><h3 style="font-size:1rem;margin-bottom:12px;color:#e2e8f0">Regras</h3>${rulesSummaryHtml}` + rulesHtml.replace('<div style="margin-bottom:24px"><h3 style="font-size:1rem;margin-bottom:12px;color:#e2e8f0">Regras</h3>', '') : '') +
             `<div style="text-align:center;padding-top:16px;border-top:1px solid #1e293b;font-size:0.72rem;color:#475569">Gerado por Codexify AI — ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}</div>`;
 
         document.body.appendChild(container);
+        window.scrollTo(0, 0);
 
-        html2pdf().set({
-            margin: [8, 6, 8, 6],
-            filename: `codexify-report-${mr.title.replace(/[^a-z0-9]/gi, '-').slice(0, 40)}.pdf`,
-            image: { type: 'jpeg', quality: 0.95 },
-            html2canvas: { scale: 2, useCORS: true, backgroundColor: '#0f172a' },
-            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-            pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
-        }).from(container).save().then(() => {
-            document.body.removeChild(container);
-            toast('PDF exportado!');
-        }).catch(() => {
-            document.body.removeChild(container);
-            toast('Erro ao gerar PDF', 'error');
-        });
+        setTimeout(() => {
+            html2pdf().set({
+                margin: [8, 6, 8, 6],
+                filename: `codexify-report-${mr.title.replace(/[^a-z0-9]/gi, '-').slice(0, 40)}.pdf`,
+                image: { type: 'jpeg', quality: 0.95 },
+                html2canvas: { scale: 2, useCORS: true, backgroundColor: '#0f172a', scrollY: 0, windowWidth: 794 },
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
+            }).from(container).save().then(() => {
+                container.remove();
+                overlay.remove();
+                toast('PDF exportado!');
+            }).catch(() => {
+                container.remove();
+                overlay.remove();
+                toast('Erro ao gerar PDF', 'error');
+            });
+        }, 300);
     }
 
     async function reanalyzeCurrentMR(mr) {
@@ -2166,7 +2189,7 @@
             desc: r.desc || r.description || '',
         }));
         const c = AnalysisEngine.countRules(rules), icons = { pass: '✓', fail: '✗', warn: '⚠' };
-        modalBody.innerHTML = `<div class="rules-summary"><div class="rules-summary-item"><div class="rules-summary-value" style="color:var(--accent-success)">${c.pass}</div><div class="rules-summary-label">Aprovadas</div></div><div class="rules-summary-item"><div class="rules-summary-value" style="color:var(--accent-danger)">${c.fail}</div><div class="rules-summary-label">Reprovadas</div></div><div class="rules-summary-item"><div class="rules-summary-value" style="color:var(--accent-warning)">${c.warn}</div><div class="rules-summary-label">Atencao</div></div></div>${rules.map(r => `<div class="rule-item"><div class="rule-status-icon ${r.status}">${icons[r.status]}</div><div class="rule-info"><div class="rule-name">${esc(r.name)}</div><div class="rule-desc">${esc(r.desc)}</div></div></div>`).join('')}`;
+        modalBody.innerHTML = `<div class="rules-summary"><div class="rules-summary-item"><div class="rules-summary-value" style="color:var(--accent-success)">${c.pass}</div><div class="rules-summary-label">Aprovadas</div></div><div class="rules-summary-item"><div class="rules-summary-value" style="color:var(--accent-danger)">${c.fail}</div><div class="rules-summary-label">Reprovadas</div></div><div class="rules-summary-item"><div class="rules-summary-value" style="color:var(--accent-warning)">${c.warn}</div><div class="rules-summary-label">Atenção</div></div></div>${rules.map(r => `<div class="rule-item"><div class="rule-status-icon ${r.status}">${icons[r.status]}</div><div class="rule-info"><div class="rule-name">${esc(r.name)}</div><div class="rule-desc">${esc(r.desc)}</div></div></div>`).join('')}`;
     }
 
     // ── Chat Tab (P1) ──────────────────────────────────────────

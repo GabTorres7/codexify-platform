@@ -1309,29 +1309,29 @@
         }
 
         circTitle.textContent = 'IA analisando ' + pending.length + ' arquivo(s)...';
-        circLabel.textContent = 'Analisando...';
+        circLabel.textContent = 'Preparando análise...';
         let done = 0;
-        let displayedPct = 20;
+        let circPctVal = 20;
 
-        // Smooth progress simulation — creeps forward while waiting for real updates
-        const simInterval = setInterval(() => {
-            if (displayedPct < 95) {
-                displayedPct += 0.3;
-                setPct(displayedPct);
-            }
-        }, 300);
+        // Contagem rápida autônoma até 90%
+        const countInterval = setInterval(() => {
+            if (circPctVal < 50) circPctVal += 1.5;
+            else if (circPctVal < 75) circPctVal += 0.8;
+            else if (circPctVal < 90) circPctVal += 0.3;
+            setPct(Math.round(circPctVal));
+        }, 150);
 
-        const aiSteps = ['Preparando análise...', 'Processando arquivo...', 'Carregando regras...', 'Enviando para IA...', 'IA analisando código...', 'Processando resultados...', 'Salvando análise...'];
-        let stepIdx = 0;
-        const stepInterval = setInterval(() => {
-            if (stepIdx < aiSteps.length - 1 && done < pending.length) {
-                stepIdx++;
-                circLabel.textContent = aiSteps[stepIdx];
+        const bulkLabels = ['Preparando análise...', 'Lendo arquivo...', 'Carregando regras...', 'Enviando para IA...', 'IA analisando código...', 'Processando resultados...', 'Finalizando...'];
+        let bulkLabelIdx = 0;
+        const labelInterval = setInterval(() => {
+            if (bulkLabelIdx < bulkLabels.length - 1 && done < pending.length) {
+                bulkLabelIdx++;
+                circLabel.textContent = bulkLabels[bulkLabelIdx];
             }
-        }, 5000);
+        }, 4000);
 
         for (let poll = 0; poll < 180; poll++) {
-            await new Promise(r => setTimeout(r, 1000));
+            await new Promise(r => setTimeout(r, 1500));
             let allDone = true;
 
             for (const job of jobs) {
@@ -1342,43 +1342,33 @@
                     const row = $('bf-' + job.idx);
 
                     if (d.status === 'completed') {
-                        job.status = 'completed'; job.score = d.ai_score; job.progress = 100; done++;
+                        job.status = 'completed'; job.score = d.ai_score; done++;
                         const g = AnalysisEngine.getScoreGrade(d.ai_score);
                         row.classList.add('completed');
                         row.children[0].innerHTML = icon('check-circle', 16);
                         row.querySelector('.file-status').innerHTML = '<strong style="color:' + g.color + '">' + d.ai_score + '/100</strong>';
                     } else if (d.status === 'failed') {
-                        job.status = 'failed'; job.progress = 100; done++;
+                        job.status = 'failed'; done++;
                         row.classList.add('failed');
                         row.children[0].innerHTML = icon('x-circle', 16);
                         row.querySelector('.file-status').textContent = 'falhou';
                         row.querySelector('.file-status').style.color = 'var(--accent-danger)';
                     } else {
                         allDone = false;
-                        job.progress = d.progress || 0;
                         const lbl = d.progress_label || 'analisando...';
                         row.querySelector('.file-status').textContent = lbl;
                         row.querySelector('.file-status').style.color = 'var(--accent-warning)';
-                        if (lbl && lbl !== 'analisando...') circLabel.textContent = lbl;
                     }
                 } catch (_) { allDone = false; }
             }
 
-            // Real progress from backend — jump ahead if real > simulated
-            const totalProgress = pending.reduce((sum, j) => sum + (j.progress || 0), 0);
-            const avgProgress = totalProgress / pending.length;
-            const realPct = 20 + (avgProgress / 100) * 80;
-            if (realPct > displayedPct) displayedPct = realPct;
-            setPct(displayedPct);
-
             if (done === pending.length) circTitle.textContent = done + ' de ' + pending.length + ' concluído(s)';
-            else circTitle.textContent = 'IA analisando ' + pending.length + ' arquivo(s)...';
 
             if (allDone) break;
         }
 
-        clearInterval(simInterval);
-        clearInterval(stepInterval);
+        clearInterval(countInterval);
+        clearInterval(labelInterval);
 
         // Phase 3: Done — show results
         const ok = jobs.filter(j => j.status === 'completed');
@@ -2552,34 +2542,38 @@
 
     function trackAnalysisSSE(analysisId) {
         const evtSource = new EventSource(API + `/analyses/${analysisId}/stream`);
-        let simulatedPct = 5;
-        let realPct = 5;
-        let lastRealUpdate = Date.now();
-        const simulateInterval = setInterval(() => {
-            const stalled = Date.now() - lastRealUpdate > 3000;
-            if (simulatedPct < realPct - 1) {
-                simulatedPct += 1;
-                _updateProgressBar(simulatedPct);
-            } else if (simulatedPct < realPct) {
-                simulatedPct = realPct;
-                _updateProgressBar(simulatedPct);
-            } else if (stalled && simulatedPct < 95) {
-                simulatedPct += 0.4;
-                _updateProgressBar(Math.round(simulatedPct));
-            }
-        }, 250);
+        let pct = 0;
+        let done = false;
+        const labels = ['Preparando análise...', 'Lendo arquivo...', 'Carregando regras...', 'Enviando para IA...', 'IA analisando código...', 'Processando resultados...', 'Finalizando...'];
+        let labelIdx = 0;
 
-        function _updateProgressBar(pct) {
+        // Contagem rápida autônoma: sobe até 90% sozinho
+        const countInterval = setInterval(() => {
+            if (done) return;
+            if (pct < 30) pct += 2;
+            else if (pct < 60) pct += 1;
+            else if (pct < 80) pct += 0.5;
+            else if (pct < 90) pct += 0.2;
+            _updateProgressBar(Math.round(pct));
+        }, 150);
+
+        const labelInterval = setInterval(() => {
+            if (done) return;
+            if (labelIdx < labels.length - 1) labelIdx++;
+            const el = $('upStepLabel');
+            if (el) el.textContent = labels[labelIdx];
+        }, 4000);
+
+        function _updateProgressBar(val) {
             const fill = $('upBarFill');
             const pctEl = $('upPct');
-            if (fill) fill.style.width = pct + '%';
-            if (pctEl) pctEl.textContent = pct + '%';
-            // Activate step dots based on percentage
-            if (pct >= 5) _activateStep('upStep1');
-            if (pct >= 20) _activateStep('upStep2');
-            if (pct >= 45) _activateStep('upStep3');
-            if (pct >= 85) _activateStep('upStep4');
-            if (pct >= 100) _activateStep('upStep5');
+            if (fill) fill.style.width = val + '%';
+            if (pctEl) pctEl.textContent = val + '%';
+            if (val >= 5) _activateStep('upStep1');
+            if (val >= 20) _activateStep('upStep2');
+            if (val >= 45) _activateStep('upStep3');
+            if (val >= 85) _activateStep('upStep4');
+            if (val >= 100) _activateStep('upStep5');
         }
 
         function _activateStep(id) {
@@ -2592,15 +2586,16 @@
             const label = $('upStepLabel');
             const fill = $('upBarFill');
 
-            if (data.progress && data.progress > realPct) { realPct = data.progress; lastRealUpdate = Date.now(); }
             if (data.progress_label && label) label.textContent = data.progress_label;
 
             if (data.status === 'completed') {
-                clearInterval(simulateInterval);
+                done = true;
+                clearInterval(countInterval);
+                clearInterval(labelInterval);
                 evtSource.close();
-                realPct = 100;
                 _updateProgressBar(100);
                 if (fill) fill.style.background = 'var(--accent-success)';
+                if (label) label.textContent = 'Análise concluída!';
                 $('upSubmit').disabled = false;
                 $('upSubmit').textContent = 'Analisar com IA';
                 toast('Análise concluída! Score: ' + data.ai_score);
@@ -2616,7 +2611,9 @@
                         </div>
                     </div>`;
             } else if (data.status === 'failed') {
-                clearInterval(simulateInterval);
+                done = true;
+                clearInterval(countInterval);
+                clearInterval(labelInterval);
                 evtSource.close();
                 if (fill) fill.style.background = 'var(--accent-danger)';
                 if (label) label.textContent = 'Erro: ' + (data.error_message || 'Falha na análise');

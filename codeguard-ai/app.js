@@ -6,7 +6,7 @@
     'use strict';
 
     // ── API ──────────────────────────────────────────────────
-    const API = window.location.origin + '/api/v1';
+    const API = 'https://codexify-1bud.onrender.com/api/v1';
     let TOKEN = '';
     let ORG_ID = '';
 

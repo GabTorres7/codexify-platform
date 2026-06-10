@@ -39,6 +39,15 @@ class AnalysisService:
     def __init__(self):
         self._ai = get_ai_service()
 
+    @staticmethod
+    async def _update_progress(db, analysis_id: UUID, progress: int, label: str) -> None:
+        try:
+            await db.table("analyses").update(
+                {"progress": progress, "progress_label": label}
+            ).eq("id", str(analysis_id)).execute()
+        except Exception:
+            pass
+
     async def trigger_analysis(self, mr_id: UUID) -> UUID:
         """
         Create an analysis record in 'queued' status and return its ID.
@@ -67,6 +76,7 @@ class AnalysisService:
         await db.table("analyses").update(
             {"status": "running", "started_at": datetime.now(UTC).isoformat()}
         ).eq("id", str(analysis_id)).execute()
+        await self._update_progress(db, analysis_id, 10, "Preparando análise...")
 
         try:
             # Load analysis + MR + repo
@@ -88,6 +98,8 @@ class AnalysisService:
                 repo=repo["full_name"],
             )
 
+            await self._update_progress(db, analysis_id, 20, "Buscando código-fonte...")
+
             # 1. Fetch diff from git platform
             git_svc = get_git_service(repo["platform"], repo["access_token"])
 
@@ -103,11 +115,15 @@ class AnalysisService:
                 for f in file_diffs
             ]
 
+            await self._update_progress(db, analysis_id, 35, "Carregando regras de análise...")
+
             # 2. Load active rules
             rule_svc = RuleService(db)
             rules = await rule_svc.get_effective_rules(
                 UUID(repo["org_id"]), UUID(repo["id"])
             )
+
+            await self._update_progress(db, analysis_id, 45, "Enviando para IA...")
 
             # 3. Call Claude
             claude_result = await self._ai.analyze_merge_request(
@@ -117,13 +133,19 @@ class AnalysisService:
                 rules=rules,
             )
 
+            await self._update_progress(db, analysis_id, 75, "Processando resultados...")
+
             # Ensure ai_score is computed correctly
             ai_score = compute_weighted_score(claude_result)
             claude_result["ai_score"] = ai_score
             claude_result["_files_diff"] = files_diff
 
+            await self._update_progress(db, analysis_id, 85, "Salvando análise...")
+
             # 4. Persist results
             await self._persist_results(db, analysis_id, mr, repo, claude_result, file_diffs)
+
+            await self._update_progress(db, analysis_id, 100, "Análise concluída!")
 
             logger.info(
                 "analysis_completed",
@@ -294,6 +316,7 @@ class AnalysisService:
         await db.table("analyses").update(
             {"status": "running", "started_at": datetime.now(UTC).isoformat()}
         ).eq("id", str(analysis_id)).execute()
+        await self._update_progress(db, analysis_id, 10, "Preparando análise...")
 
         try:
             # Parse raw diff into file chunks
@@ -305,6 +328,8 @@ class AnalysisService:
                 files=len(files_diff),
             )
 
+            await self._update_progress(db, analysis_id, 20, "Processando arquivo enviado...")
+
             # Load analysis to get mr_id and org
             analysis_resp = (
                 await db.table("analyses")
@@ -314,6 +339,8 @@ class AnalysisService:
                 .execute()
             )
             mr = analysis_resp.data["merge_requests"]
+
+            await self._update_progress(db, analysis_id, 30, "Carregando regras...")
 
             # Load org-level rules (no repo-specific rules for uploads)
             # Find the org from the user's merge request
@@ -331,6 +358,8 @@ class AnalysisService:
                     rule_svc = RuleService(db)
                     org_rules = await rule_svc.list_rules(UUID(org_id), active_only=True)
 
+            await self._update_progress(db, analysis_id, 45, "Enviando para IA...")
+
             # Call Claude
             claude_result = await self._ai.analyze_merge_request(
                 mr_title=mr_title,
@@ -338,6 +367,8 @@ class AnalysisService:
                 files_diff=files_diff,
                 rules=org_rules,
             )
+
+            await self._update_progress(db, analysis_id, 75, "Processando resultados...")
 
             ai_score = compute_weighted_score(claude_result)
             claude_result["ai_score"] = ai_score
@@ -358,6 +389,8 @@ class AnalysisService:
 
             now = datetime.now(UTC).isoformat()
             new_status = "approved" if ai_score >= 75 else "issues"
+
+            await self._update_progress(db, analysis_id, 85, "Salvando análise...")
 
             # Update analysis record
             await db.table("analyses").update(
@@ -423,6 +456,8 @@ class AnalysisService:
             await db.table("merge_requests").update(
                 {"status": new_status, "ai_score": ai_score, "updated_at": now}
             ).eq("id", mr["id"]).execute()
+
+            await self._update_progress(db, analysis_id, 100, "Análise concluída!")
 
             # Log activity if we have an org
             if virtual_repo.get("org_id"):

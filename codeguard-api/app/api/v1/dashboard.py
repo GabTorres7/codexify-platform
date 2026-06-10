@@ -134,6 +134,7 @@ async def get_analytics(
     """
     Historical analytics: dev ranking, issue heatmap, score evolution.
     """
+    import asyncio
     from datetime import UTC, datetime, timedelta
 
     db = await get_supabase()
@@ -147,15 +148,24 @@ async def get_analytics(
     if not repo_ids:
         return {"dev_ranking": [], "issue_heatmap": [], "score_evolution": []}
 
-    # ── Dev Ranking: MRs analyzed per author, avg score ──
-    mrs_resp = (
-        await db.table("merge_requests")
-        .select("author_username, author_name, ai_score, status")
+    now = datetime.now(UTC)
+    eight_weeks_ago = (now - timedelta(weeks=8)).isoformat()
+
+    # Parallel: fetch MRs + MR IDs for analyses in one shot
+    mrs_task = (
+        db.table("merge_requests")
+        .select("id, author_username, author_name, ai_score, status, created_at")
         .in_("repo_id", repo_ids)
         .execute()
     )
+    mrs_resp = await mrs_task
+    all_mrs = mrs_resp.data or []
+
+    # ── Dev Ranking ──
     dev_stats: dict[str, dict] = {}
-    for mr in mrs_resp.data or []:
+    mr_ids = []
+    for mr in all_mrs:
+        mr_ids.append(mr["id"])
         author = mr.get("author_username") or mr.get("author_name") or "unknown"
         if author not in dev_stats:
             dev_stats[author] = {
@@ -168,7 +178,7 @@ async def get_analytics(
         dev_stats[author]["total_mrs"] += 1
         if mr.get("ai_score") is not None:
             dev_stats[author]["scores"].append(mr["ai_score"])
-        if mr.get("status") == "approved" or mr.get("status") == "merged":
+        if mr.get("status") in ("approved", "merged"):
             dev_stats[author]["approved"] += 1
         elif mr.get("status") == "issues":
             dev_stats[author]["issues"] += 1
@@ -188,55 +198,61 @@ async def get_analytics(
         reverse=True,
     )
 
-    # ── Issue Heatmap: count issues by severity across all analyses ──
-    all_analyses_resp = (
-        await db.table("analyses")
-        .select("id")
-        .in_("mr_id", [mr["id"] for mr in (
-            await db.table("merge_requests")
+    # ── Issue Heatmap + Score Evolution: parallel queries ──
+    async def fetch_issue_heatmap():
+        if not mr_ids:
+            return {"critical": 0, "warning": 0, "info": 0, "suggestion": 0}
+        analyses_resp = (
+            await db.table("analyses")
             .select("id")
-            .in_("repo_id", repo_ids)
-            .execute()
-        ).data or []])
-        .eq("status", "completed")
-        .execute()
-    )
-    analysis_ids = [a["id"] for a in (all_analyses_resp.data or [])]
-
-    issue_heatmap = {"critical": 0, "warning": 0, "info": 0, "suggestion": 0}
-    if analysis_ids:
-        issues_resp = (
-            await db.table("analysis_issues")
-            .select("severity")
-            .in_("analysis_id", analysis_ids[:200])
+            .in_("mr_id", mr_ids[:200])
+            .eq("status", "completed")
             .execute()
         )
-        for issue in issues_resp.data or []:
-            sev = issue.get("severity", "info")
-            if sev in issue_heatmap:
-                issue_heatmap[sev] += 1
+        analysis_ids = [a["id"] for a in (analyses_resp.data or [])]
+        heatmap = {"critical": 0, "warning": 0, "info": 0, "suggestion": 0}
+        if analysis_ids:
+            issues_resp = (
+                await db.table("analysis_issues")
+                .select("severity")
+                .in_("analysis_id", analysis_ids[:200])
+                .execute()
+            )
+            for issue in issues_resp.data or []:
+                sev = issue.get("severity", "info")
+                if sev in heatmap:
+                    heatmap[sev] += 1
+        return heatmap
 
-    # ── Score Evolution: avg score per week (last 8 weeks) ──
-    now = datetime.now(UTC)
-    score_evolution = []
-    for weeks_ago in range(7, -1, -1):
-        week_start = now - timedelta(weeks=weeks_ago + 1)
-        week_end = now - timedelta(weeks=weeks_ago)
-        week_mrs = (
+    async def fetch_score_evolution():
+        score_mrs_resp = (
             await db.table("merge_requests")
-            .select("ai_score")
+            .select("ai_score, created_at")
             .in_("repo_id", repo_ids)
-            .gte("created_at", week_start.isoformat())
-            .lt("created_at", week_end.isoformat())
+            .gte("created_at", eight_weeks_ago)
             .not_.is_("ai_score", "null")
             .execute()
         )
-        scores = [m["ai_score"] for m in (week_mrs.data or []) if m.get("ai_score")]
-        score_evolution.append({
-            "week": week_end.strftime("%d/%m"),
-            "avg_score": round(sum(scores) / len(scores)) if scores else None,
-            "count": len(scores),
-        })
+        score_mrs = score_mrs_resp.data or []
+        evolution = []
+        for weeks_ago in range(7, -1, -1):
+            week_start = now - timedelta(weeks=weeks_ago + 1)
+            week_end = now - timedelta(weeks=weeks_ago)
+            scores = [
+                m["ai_score"] for m in score_mrs
+                if m.get("ai_score") and week_start.isoformat() <= m["created_at"] < week_end.isoformat()
+            ]
+            evolution.append({
+                "week": week_end.strftime("%d/%m"),
+                "avg_score": round(sum(scores) / len(scores)) if scores else None,
+                "count": len(scores),
+            })
+        return evolution
+
+    issue_heatmap, score_evolution = await asyncio.gather(
+        fetch_issue_heatmap(),
+        fetch_score_evolution(),
+    )
 
     return {
         "dev_ranking": dev_ranking,

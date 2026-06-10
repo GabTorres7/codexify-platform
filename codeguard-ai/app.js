@@ -222,10 +222,10 @@
     function toast(msg, type) {
         const t = document.createElement('div');
         t.className = 'toast toast-' + (type || 'success');
-        t.textContent = msg;
+        t.innerHTML = `<span>${msg}</span><div class="toast-progress"></div>`;
         document.body.appendChild(t);
         setTimeout(() => t.classList.add('show'), 10);
-        setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 3500);
+        setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 4000);
     }
 
     function esc(text) { const d = document.createElement('div'); d.textContent = text; return d.innerHTML; }
@@ -243,9 +243,10 @@
     }
 
     function showLoading() {
-        return `<div class="card"><div class="card-body" style="padding:40px;text-align:center;color:var(--text-tertiary)">
-            <div class="analyzing-indicator" style="font-size:1rem;padding:12px 24px"><div class="analyzing-dots"><span></span><span></span><span></span></div>Carregando...</div>
-        </div></div>`;
+        return `<div class="skeleton-container">
+            <div class="skeleton-card"><div class="skeleton-line w60"></div><div class="skeleton-line w80"></div><div class="skeleton-line w40"></div></div>
+            <div class="skeleton-card"><div class="skeleton-line w80"></div><div class="skeleton-line w60"></div></div>
+        </div>`;
     }
 
     // ── Router ───────────────────────────────────────────────
@@ -442,41 +443,44 @@
 
         await ensureAuth();
 
+        // Parallel fetch: metrics + chart + activity
+        const [metricsRes, chartRes, activityRes] = await Promise.allSettled([
+            api('GET', `/orgs/${ORG_ID}/dashboard/metrics`),
+            api('GET', `/orgs/${ORG_ID}/dashboard/chart`),
+            api('GET', `/orgs/${ORG_ID}/dashboard/activity?limit=10`),
+        ]);
+
         // Metrics
-        try {
-            const metrics = await api('GET', `/orgs/${ORG_ID}/dashboard/metrics`);
+        if (metricsRes.status === 'fulfilled') {
+            const metrics = metricsRes.value;
             $('metricsGrid').innerHTML = `
                 ${metricCard('purple', icon('clock', 20), metrics.pending + (metrics.analyzing || 0), 'MRs Pendentes', '', 0)}
-                ${metricCard('green', icon('check-circle', 20), metrics.approved + (metrics.merged || 0), 'Aprovados / Merged', '', 0.1)}
-                ${metricCard('red', icon('alert-triangle', 20), metrics.issues, 'Com Problemas', '', 0.2)}
-                ${metricCard('yellow', icon('star', 20), metrics.avg_score + '<span style="font-size:1rem;color:var(--text-tertiary)">/100</span>', 'Score Médio IA', '', 0.3)}
+                ${metricCard('green', icon('check-circle', 20), metrics.approved + (metrics.merged || 0), 'Aprovados / Merged', '', 0.05)}
+                ${metricCard('red', icon('alert-triangle', 20), metrics.issues, 'Com Problemas', '', 0.1)}
+                ${metricCard('yellow', icon('star', 20), metrics.avg_score + '<span style="font-size:1rem;color:var(--text-tertiary)">/100</span>', 'Score Médio IA', '', 0.15)}
             `;
-        } catch (_) {
-            if (typeof MERGE_REQUESTS !== 'undefined') {
-                const metrics = AnalysisEngine.getMetrics(MERGE_REQUESTS);
-                $('metricsGrid').innerHTML = `
-                    ${metricCard('purple', icon('clock', 20), metrics.pending, 'MRs Pendentes', '', 0)}
-                    ${metricCard('green', icon('check-circle', 20), metrics.approved, 'Aprovados / Merged', '', 0.1)}
-                    ${metricCard('red', icon('alert-triangle', 20), metrics.withIssues, 'Com Problemas', '', 0.2)}
-                    ${metricCard('yellow', icon('star', 20), metrics.avgScore + '<span style="font-size:1rem;color:var(--text-tertiary)">/100</span>', 'Score Médio IA', '', 0.3)}
-                `;
-            }
+        } else if (typeof MERGE_REQUESTS !== 'undefined') {
+            const metrics = AnalysisEngine.getMetrics(MERGE_REQUESTS);
+            $('metricsGrid').innerHTML = `
+                ${metricCard('purple', icon('clock', 20), metrics.pending, 'MRs Pendentes', '', 0)}
+                ${metricCard('green', icon('check-circle', 20), metrics.approved, 'Aprovados / Merged', '', 0.05)}
+                ${metricCard('red', icon('alert-triangle', 20), metrics.withIssues, 'Com Problemas', '', 0.1)}
+                ${metricCard('yellow', icon('star', 20), metrics.avgScore + '<span style="font-size:1rem;color:var(--text-tertiary)">/100</span>', 'Score Médio IA', '', 0.15)}
+            `;
         }
 
-        // Chart from API (initial load)
-        try {
-            const chartData = await api('GET', `/orgs/${ORG_ID}/dashboard/chart`);
-            if (chartData && chartData.length) {
-                const max = Math.max(...chartData.map(d => d.opened || d.value || 1));
-                const dayPt = {Mon:'Seg',Tue:'Ter',Wed:'Qua',Thu:'Qui',Fri:'Sex',Sat:'Sáb',Sun:'Dom'};
-                const dayFull = {Mon:'Segunda',Tue:'Terça',Wed:'Quarta',Thu:'Quinta',Fri:'Sexta',Sat:'Sábado',Sun:'Domingo'};
-                $('chartContainer').innerHTML = chartData.map(d => { const lbl = d.day || d.label; const val = d.opened || d.value || 0; return `<div class="chart-bar-group"><div class="chart-bar" style="height:${(val/Math.max(max,1))*150}px"></div><div class="chart-bar-tooltip"><span class="tt-day">${dayFull[lbl] || lbl}</span><br>${val} MR${val !== 1 ? 's' : ''}</div><span class="chart-label">${dayPt[lbl] || lbl}</span></div>`; }).join('');
-            }
-        } catch (_) {}
+        // Chart
+        if (chartRes.status === 'fulfilled' && chartRes.value && chartRes.value.length) {
+            const chartData = chartRes.value;
+            const max = Math.max(...chartData.map(d => d.opened || d.value || 1));
+            const dayPt = {Mon:'Seg',Tue:'Ter',Wed:'Qua',Thu:'Qui',Fri:'Sex',Sat:'Sáb',Sun:'Dom'};
+            const dayFull = {Mon:'Segunda',Tue:'Terça',Wed:'Quarta',Thu:'Quinta',Fri:'Sexta',Sat:'Sábado',Sun:'Domingo'};
+            $('chartContainer').innerHTML = chartData.map(d => { const lbl = d.day || d.label; const val = d.opened || d.value || 0; return `<div class="chart-bar-group"><div class="chart-bar" style="height:${(val/Math.max(max,1))*150}px"></div><div class="chart-bar-tooltip"><span class="tt-day">${dayFull[lbl] || lbl}</span><br>${val} MR${val !== 1 ? 's' : ''}</div><span class="chart-label">${dayPt[lbl] || lbl}</span></div>`; }).join('');
+        }
 
         // Activity
-        try {
-            const activity = await api('GET', `/orgs/${ORG_ID}/dashboard/activity?limit=10`);
+        if (activityRes.status === 'fulfilled') {
+            const activity = activityRes.value;
             if (activity && activity.length) {
                 $('activityList').innerHTML = activity.map(a => {
                     const typeClass = a.event_type === 'analysis_completed' ? 'success' : a.event_type === 'mr_rejected' ? 'danger' : 'info';
@@ -486,10 +490,8 @@
             } else {
                 $('activityList').innerHTML = '<div style="padding:12px;color:var(--text-tertiary)">Nenhuma atividade recente</div>';
             }
-        } catch (_) {
-            if (typeof RECENT_ACTIVITY !== 'undefined') {
-                $('activityList').innerHTML = RECENT_ACTIVITY.map(a => `<div class="activity-item"><div class="activity-dot ${a.type}"></div><div class="activity-info"><div class="activity-text">${a.text}</div><div class="activity-time">${a.time}</div></div></div>`).join('');
-            }
+        } else if (typeof RECENT_ACTIVITY !== 'undefined') {
+            $('activityList').innerHTML = RECENT_ACTIVITY.map(a => `<div class="activity-item"><div class="activity-dot ${a.type}"></div><div class="activity-info"><div class="activity-text">${a.text}</div><div class="activity-time">${a.time}</div></div></div>`).join('');
         }
 
         // MR Table with filters
@@ -699,7 +701,7 @@
         document.querySelectorAll('[data-count-to]').forEach(el => {
             const target = parseInt(el.dataset.countTo);
             if (isNaN(target) || target === 0) return;
-            const duration = 800;
+            const duration = 400;
             const start = performance.now();
             el.textContent = '0';
             function step(now) {
@@ -1819,14 +1821,97 @@
         const g = AnalysisEngine.getScoreGrade(mr.aiScore);
         const cats = mr.analysisCategories || {};
         const hasCats = Object.keys(cats).length > 0;
-        modalBody.innerHTML = `<div class="analysis-score-section"><div class="score-circle" style="--score-color:${g.color};--score-pct:${mr.aiScore};color:${g.color}">${mr.aiScore}</div><div class="score-details"><div class="score-title">${g.label}</div><div class="score-description">${g.description}</div></div></div>${hasCats ? `<div class="analysis-categories">${Object.entries(cats).map(([k,v]) => `<div class="category-card"><div class="category-header"><span class="category-name">${AnalysisEngine.getCategoryLabel(k)}</span><span class="category-score" style="color:${AnalysisEngine.getCategoryColor(v)}">${v}/100</span></div><div class="category-bar"><div class="category-bar-fill" style="width:${v}%;background:${AnalysisEngine.getCategoryColor(v)}"></div></div></div>`).join('')}</div>` : ''}${mr.issues.length ? `<div class="issues-section"><h3>🔴 Issues (${mr.issues.length})</h3>${mr.issues.map(i => {
+
+        // Count issues by severity for filter chips
+        const sevCounts = { critical: 0, warning: 0, info: 0, suggestion: 0 };
+        (mr.issues || []).forEach(i => { const s = i.severity || 'info'; if (sevCounts[s] !== undefined) sevCounts[s]++; });
+
+        const actionButtons = `<div class="analysis-actions" style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
+            <button class="btn btn-sm btn-outline" id="btnExportReport">${icon('download',14)} Exportar Relatório</button>
+            <button class="btn btn-sm btn-outline" id="btnReanalyze">${icon('refresh-cw',14)} Re-analisar</button>
+        </div>`;
+
+        const filterChips = mr.issues.length ? `<div class="issue-filters" style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+            <button class="issue-filter-chip active" data-sev="all">Todos (${mr.issues.length})</button>
+            ${sevCounts.critical ? `<button class="issue-filter-chip critical" data-sev="critical">Critical (${sevCounts.critical})</button>` : ''}
+            ${sevCounts.warning ? `<button class="issue-filter-chip warning" data-sev="warning">Warning (${sevCounts.warning})</button>` : ''}
+            ${sevCounts.info ? `<button class="issue-filter-chip info" data-sev="info">Info (${sevCounts.info})</button>` : ''}
+            ${sevCounts.suggestion ? `<button class="issue-filter-chip suggestion" data-sev="suggestion">Suggestion (${sevCounts.suggestion})</button>` : ''}
+        </div>` : '';
+
+        modalBody.innerHTML = `<div class="analysis-score-section"><div class="score-circle" style="--score-color:${g.color};--score-pct:${mr.aiScore};color:${g.color}">${mr.aiScore}</div><div class="score-details"><div class="score-title">${g.label}</div><div class="score-description">${g.description}</div>${actionButtons}</div></div>${hasCats ? `<div class="analysis-categories">${Object.entries(cats).map(([k,v]) => `<div class="category-card"><div class="category-header"><span class="category-name">${AnalysisEngine.getCategoryLabel(k)}</span><span class="category-score" style="color:${AnalysisEngine.getCategoryColor(v)}">${v}/100</span></div><div class="category-bar"><div class="category-bar-fill" style="width:${v}%;background:${AnalysisEngine.getCategoryColor(v)}"></div></div></div>`).join('')}</div>` : ''}${mr.issues.length ? `<div class="issues-section"><h3>Issues (${mr.issues.length})</h3>${filterChips}<div id="issuesList">${_renderIssueCards(mr.issues)}</div></div>` : '<div class="empty-state" style="padding:30px"><h3>Sem issues!</h3></div>'}`;
+
+        // Bind action buttons
+        const btnExport = $('btnExportReport');
+        if (btnExport) btnExport.addEventListener('click', () => exportAnalysisReport(mr));
+        const btnReanalyze = $('btnReanalyze');
+        if (btnReanalyze) btnReanalyze.addEventListener('click', () => reanalyzeCurrentMR(mr));
+
+        // Bind filter chips
+        document.querySelectorAll('.issue-filter-chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+                document.querySelectorAll('.issue-filter-chip').forEach(c => c.classList.remove('active'));
+                chip.classList.add('active');
+                const sev = chip.dataset.sev;
+                const filtered = sev === 'all' ? mr.issues : mr.issues.filter(i => (i.severity || 'info') === sev);
+                const list = $('issuesList');
+                if (list) list.innerHTML = _renderIssueCards(filtered);
+                refreshIcons();
+            });
+        });
+        refreshIcons();
+    }
+
+    function _renderIssueCards(issues) {
+        return issues.map(i => {
             const sev = i.severity || 'info';
             const title = i.title || '';
             const file = i.file || i.file_path || '';
             const desc = i.description || '';
             const sug = i.suggestion || '';
             return `<div class="issue-card ${sev}"><div class="issue-header"><span class="issue-title">${esc(title)}</span><span class="issue-severity ${sev}">${sev.toUpperCase()}</span></div>${file ? `<div class="issue-file">${esc(file)}${i.line_ref ? ':' + i.line_ref : ''}</div>` : ''}<div class="issue-description">${esc(desc)}</div>${sug ? `<div class="issue-suggestion"><strong>${icon('lightbulb', 14)} Sugestão</strong> ${esc(sug)}</div>` : ''}</div>`;
-        }).join('')}</div>` : '<div class="empty-state" style="padding:30px"><h3>Sem issues! 🎉</h3></div>'}`;
+        }).join('') || '<div style="padding:20px;text-align:center;color:var(--text-tertiary)">Nenhuma issue nesta categoria</div>';
+    }
+
+    function exportAnalysisReport(mr) {
+        const g = AnalysisEngine.getScoreGrade(mr.aiScore);
+        const cats = mr.analysisCategories || {};
+        let md = `# Relatório de Análise — ${mr.title}\n\n`;
+        md += `**Score:** ${mr.aiScore}/100 (${g.label})\n`;
+        md += `**Branch:** ${mr.branch} → ${mr.targetBranch}\n`;
+        md += `**Data:** ${new Date().toLocaleDateString('pt-BR')}\n\n`;
+        if (Object.keys(cats).length) {
+            md += `## Categorias\n| Categoria | Score |\n|---|---|\n`;
+            Object.entries(cats).forEach(([k,v]) => { md += `| ${AnalysisEngine.getCategoryLabel(k)} | ${v}/100 |\n`; });
+            md += '\n';
+        }
+        if (mr.issues.length) {
+            md += `## Issues (${mr.issues.length})\n`;
+            mr.issues.forEach(i => {
+                md += `### [${(i.severity||'info').toUpperCase()}] ${i.title||''}\n`;
+                if (i.file_path || i.file) md += `**Arquivo:** ${i.file_path || i.file}${i.line_ref ? ':'+i.line_ref : ''}\n`;
+                if (i.description) md += `${i.description}\n`;
+                if (i.suggestion) md += `> **Sugestão:** ${i.suggestion}\n`;
+                md += '\n';
+            });
+        }
+        md += `---\n*Gerado por Codexify AI*\n`;
+        const blob = new Blob([md], { type: 'text/markdown' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `codexify-report-${mr.title.replace(/[^a-z0-9]/gi, '-').slice(0, 40)}.md`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+        toast('Relatório exportado!');
+    }
+
+    async function reanalyzeCurrentMR(mr) {
+        if (!mr._repoId || !mr.id) { toast('Não é possível re-analisar este MR', 'error'); return; }
+        try {
+            await ensureAuth();
+            await api('POST', `/orgs/${ORG_ID}/repos/${mr._repoId}/mrs/${mr.id}/analyze`);
+            toast('Re-análise iniciada!');
+        } catch (e) { toast(e.message || 'Erro ao re-analisar', 'error'); }
     }
 
     function renderDiffTab() {
@@ -2348,13 +2433,22 @@
                 <div class="card">
                     <div class="card-header"><span class="card-title">Progresso da Análise</span></div>
                     <div class="card-body" style="padding:24px">
-                        <div style="display:flex;gap:20px;margin-bottom:16px" id="upSteps">
-                            <div class="up-step" id="upStep1"><div class="up-step-dot active"></div><span>Na fila</span></div>
-                            <div class="up-step" id="upStep2"><div class="up-step-dot"></div><span>Analisando</span></div>
-                            <div class="up-step" id="upStep3"><div class="up-step-dot"></div><span>Concluido</span></div>
+                        <div class="progress-steps" id="upSteps">
+                            <div class="progress-step active" id="upStep1"><div class="progress-step-icon">${icon('clock',14)}</div><span>Fila</span></div>
+                            <div class="progress-step-line"></div>
+                            <div class="progress-step" id="upStep2"><div class="progress-step-icon">${icon('code',14)}</div><span>Preparando</span></div>
+                            <div class="progress-step-line"></div>
+                            <div class="progress-step" id="upStep3"><div class="progress-step-icon">${icon('brain',14)}</div><span>IA Analisando</span></div>
+                            <div class="progress-step-line"></div>
+                            <div class="progress-step" id="upStep4"><div class="progress-step-icon">${icon('save',14)}</div><span>Salvando</span></div>
+                            <div class="progress-step-line"></div>
+                            <div class="progress-step" id="upStep5"><div class="progress-step-icon">${icon('check-circle',14)}</div><span>Pronto</span></div>
                         </div>
-                        <div class="up-bar"><div class="up-bar-fill" id="upBarFill" style="width:33%"></div></div>
-                        <div id="upStepLabel" style="margin-top:12px;color:var(--text-secondary);font-size:0.9rem">Aguardando na fila...</div>
+                        <div class="up-bar"><div class="up-bar-fill" id="upBarFill" style="width:5%"></div></div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">
+                            <div id="upStepLabel" style="color:var(--text-secondary);font-size:0.9rem">Aguardando na fila...</div>
+                            <div id="upPct" style="color:var(--accent-primary);font-weight:600;font-size:0.95rem">5%</div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2423,27 +2517,54 @@
 
     function trackAnalysisSSE(analysisId) {
         const evtSource = new EventSource(API + `/analyses/${analysisId}/stream`);
+        let simulatedPct = 5;
+        let realPct = 5;
+        const simulateInterval = setInterval(() => {
+            if (simulatedPct < realPct - 1) {
+                simulatedPct += 1;
+                _updateProgressBar(simulatedPct);
+            } else if (simulatedPct < realPct) {
+                simulatedPct = realPct;
+                _updateProgressBar(simulatedPct);
+            }
+        }, 200);
+
+        function _updateProgressBar(pct) {
+            const fill = $('upBarFill');
+            const pctEl = $('upPct');
+            if (fill) fill.style.width = pct + '%';
+            if (pctEl) pctEl.textContent = pct + '%';
+            // Activate step dots based on percentage
+            if (pct >= 5) _activateStep('upStep1');
+            if (pct >= 20) _activateStep('upStep2');
+            if (pct >= 45) _activateStep('upStep3');
+            if (pct >= 85) _activateStep('upStep4');
+            if (pct >= 100) _activateStep('upStep5');
+        }
+
+        function _activateStep(id) {
+            const el = $(id);
+            if (el) el.classList.add('active');
+        }
+
         evtSource.onmessage = (event) => {
             const data = JSON.parse(event.data);
-            const fill = $('upBarFill');
             const label = $('upStepLabel');
+            const fill = $('upBarFill');
 
-            // Update steps
-            if (data.step >= 1) $('upStep1').querySelector('.up-step-dot').classList.add('active');
-            if (data.step >= 2) $('upStep2').querySelector('.up-step-dot').classList.add('active');
-            if (data.step >= 3) $('upStep3').querySelector('.up-step-dot').classList.add('active');
-
-            fill.style.width = (data.step / 3 * 100) + '%';
-            if (data.step_label) label.textContent = data.step_label;
+            realPct = data.progress || realPct;
+            if (data.progress_label && label) label.textContent = data.progress_label;
 
             if (data.status === 'completed') {
+                clearInterval(simulateInterval);
                 evtSource.close();
-                fill.style.background = 'var(--accent-success)';
+                realPct = 100;
+                _updateProgressBar(100);
+                if (fill) fill.style.background = 'var(--accent-success)';
                 $('upSubmit').disabled = false;
                 $('upSubmit').textContent = 'Analisar com IA';
-                toast('Análise concluida! Score: ' + data.ai_score);
+                toast('Análise concluída! Score: ' + data.ai_score);
 
-                // Show result card
                 const g = AnalysisEngine.getScoreGrade(data.ai_score);
                 $('upResult').innerHTML = `
                     <div class="card stagger-in">
@@ -2455,15 +2576,16 @@
                         </div>
                     </div>`;
             } else if (data.status === 'failed') {
+                clearInterval(simulateInterval);
                 evtSource.close();
-                fill.style.background = 'var(--accent-danger)';
-                label.textContent = 'Erro: ' + (data.error_message || 'Falha na análise');
+                if (fill) fill.style.background = 'var(--accent-danger)';
+                if (label) label.textContent = 'Erro: ' + (data.error_message || 'Falha na análise');
                 $('upSubmit').disabled = false;
                 $('upSubmit').textContent = 'Analisar com IA';
                 toast('Análise falhou', 'error');
             }
         };
-        evtSource.onerror = () => { evtSource.close(); };
+        evtSource.onerror = () => { clearInterval(simulateInterval); evtSource.close(); };
     }
 
     // ================================================================

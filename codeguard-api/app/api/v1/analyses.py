@@ -28,14 +28,15 @@ async def stream_analysis_progress(analysis_id: UUID):
     """
 
     async def event_generator():
+        last_progress = -1
         last_status = None
-        max_polls = 120  # ~2 minutes max
+        max_polls = 180  # ~3 minutes max
         for _ in range(max_polls):
             try:
                 db = await get_supabase()
                 resp = (
                     await db.table("analyses")
-                    .select("status, ai_score, error_message, started_at, completed_at")
+                    .select("status, ai_score, error_message, started_at, completed_at, progress, progress_label")
                     .eq("id", str(analysis_id))
                     .single()
                     .execute()
@@ -46,30 +47,31 @@ async def stream_analysis_progress(analysis_id: UUID):
 
                 row = resp.data
                 status = row["status"]
+                progress = row.get("progress") or 0
+                progress_label = row.get("progress_label") or ""
 
-                if status != last_status:
+                if status == "queued" and progress == 0:
+                    progress = 5
+                    progress_label = progress_label or "Na fila..."
+                elif status == "completed":
+                    progress = 100
+                    progress_label = "Análise concluída!"
+                elif status == "failed":
+                    progress = 100
+                    progress_label = "Falha na análise"
+
+                if progress != last_progress or status != last_status:
                     payload = {
                         "status": status,
                         "ai_score": row.get("ai_score"),
                         "error_message": row.get("error_message"),
                         "started_at": row.get("started_at"),
                         "completed_at": row.get("completed_at"),
+                        "progress": progress,
+                        "progress_label": progress_label,
                     }
-                    # Add step info for UI progress bar
-                    if status == "queued":
-                        payload["step"] = 1
-                        payload["step_label"] = "Na fila..."
-                    elif status == "running":
-                        payload["step"] = 2
-                        payload["step_label"] = "IA analisando código..."
-                    elif status == "completed":
-                        payload["step"] = 3
-                        payload["step_label"] = "Análise concluída!"
-                    elif status == "failed":
-                        payload["step"] = 3
-                        payload["step_label"] = "Falha na análise"
-
                     yield f"data: {json.dumps(payload)}\n\n"
+                    last_progress = progress
                     last_status = status
 
                 if status in ("completed", "failed"):

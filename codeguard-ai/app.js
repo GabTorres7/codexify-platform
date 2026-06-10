@@ -2033,36 +2033,36 @@
                 <div style="font-size:0.68rem;color:#475569">Gerado por <strong style="color:#818cf8">Codexify AI</strong> — ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}</div>
             </div>`;
 
-        // ── Render and capture ──
-        // Close modal temporarily to avoid interference
-        const modalEl = document.querySelector('.modal-overlay');
-        if (modalEl) modalEl.style.display = 'none';
-
-        const el = document.createElement('div');
-        el.style.cssText = 'position:absolute;top:0;left:0;width:794px;z-index:99999;background:#0f172a;color:#e2e8f0;font-family:Inter,Arial,Helvetica,sans-serif;padding:32px 28px;';
-        el.innerHTML = bodyHtml;
-        document.body.appendChild(el);
-        window.scrollTo(0, 0);
-
-        setTimeout(() => {
-            html2pdf().set({
-                margin: [10, 8, 10, 8],
-                filename: `codexify-report-${mr.title.replace(/[^a-z0-9]/gi, '-').slice(0, 40)}.pdf`,
-                image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 2, backgroundColor: '#0f172a', logging: false, scrollX: 0, scrollY: -window.scrollY },
-                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                pagebreak: { mode: ['css', 'legacy'] },
-            }).from(el).save().then(() => {
-                el.remove();
-                if (modalEl) modalEl.style.display = '';
-                toast('PDF exportado!');
-            }).catch((err) => {
-                console.error('PDF export error:', err);
-                el.remove();
-                if (modalEl) modalEl.style.display = '';
-                toast('Erro ao gerar PDF', 'error');
-            });
-        }, 500);
+        // ── Open clean popup window for reliable PDF capture ──
+        const fname = `codexify-report-${mr.title.replace(/[^a-z0-9]/gi, '-').slice(0, 40)}.pdf`;
+        const safeBody = bodyHtml.replace(/<\/script>/g, '<\\/script>');
+        const win = window.open('', '_blank', 'width=820,height=700');
+        if (!win) { toast('Popup bloqueado pelo navegador. Permita popups para este site.', 'error'); return; }
+        toast('Gerando PDF na nova aba...');
+        win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Codexify — Relatório</title>' +
+            '<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.2/html2pdf.bundle.min.js"><\/script>' +
+            '</head><body style="background:#0f172a;color:#e2e8f0;font-family:Inter,Arial,Helvetica,sans-serif;padding:32px 28px;margin:0;width:794px;">' +
+            safeBody +
+            '<script>' +
+            'window.onload=function(){' +
+                'document.title="Gerando PDF...";' +
+                'html2pdf().set({' +
+                    'margin:[10,8,10,8],' +
+                    'filename:"' + fname.replace(/"/g, '') + '",' +
+                    'image:{type:"jpeg",quality:0.98},' +
+                    'html2canvas:{scale:2,backgroundColor:"#0f172a",logging:false},' +
+                    'jsPDF:{unit:"mm",format:"a4",orientation:"portrait"},' +
+                    'pagebreak:{mode:["css","legacy"]}' +
+                '}).from(document.body).save().then(function(){' +
+                    'document.title="PDF salvo!";' +
+                    'setTimeout(function(){window.close()},2000);' +
+                '}).catch(function(e){' +
+                    'document.title="Erro - use Ctrl+P para salvar como PDF";' +
+                    'console.error(e);' +
+                '});' +
+            '};' +
+            '<\/script></body></html>');
+        win.document.close();
     }
 
     async function reanalyzeCurrentMR(mr) {

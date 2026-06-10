@@ -2007,57 +2007,74 @@
             `</div>`;
         }
 
-        // Overlay to cover UI while rendering
-        const overlay = document.createElement('div');
-        overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#0f172a;display:flex;align-items:center;justify-content:center;color:#818cf8;font-size:1.2rem;font-family:Inter,sans-serif';
-        overlay.textContent = 'Gerando PDF...';
-        document.body.appendChild(overlay);
+        // Create an iframe to isolate the PDF content — html2canvas needs visible, in-flow DOM
+        const iframe = document.createElement('iframe');
+        iframe.style.cssText = 'position:fixed;top:0;left:0;width:800px;height:600px;z-index:99999;border:none;opacity:0;';
+        document.body.appendChild(iframe);
 
-        // Container must be on-screen for html2canvas to capture
-        const container = document.createElement('div');
-        container.style.cssText = 'position:absolute;top:0;left:0;width:794px;background:#0f172a;color:#e2e8f0;font-family:Inter,sans-serif;padding:28px 24px;z-index:99998;';
+        const iDoc = iframe.contentDocument || iframe.contentWindow.document;
+        iDoc.open();
+        iDoc.write(`<!DOCTYPE html><html><head><style>
+            * { margin:0; padding:0; box-sizing:border-box; }
+            body { background:#0f172a; color:#e2e8f0; font-family:Inter,Arial,Helvetica,sans-serif; padding:28px 24px; width:794px; }
+        </style></head><body></body></html>`);
+        iDoc.close();
+
+        const container = iDoc.createElement('div');
         container.innerHTML =
             `<div style="text-align:center;margin-bottom:28px">` +
                 `<div style="font-size:1.6rem;font-weight:800;color:#818cf8;margin-bottom:4px">Codexify</div>` +
-                `<div style="font-size:0.75rem;color:#475569;letter-spacing:2px;text-transform:uppercase">Relatório de Análise</div>` +
+                `<div style="font-size:0.75rem;color:#64748b;letter-spacing:2px;text-transform:uppercase">Relatório de Análise</div>` +
             `</div>` +
             `<div style="background:#1e293b;border-radius:10px;padding:20px;margin-bottom:24px">` +
-                `<h2 style="font-size:1.15rem;margin-bottom:12px;color:#e2e8f0">${esc(mr.title)}</h2>` +
-                `<div style="display:flex;gap:20px;flex-wrap:wrap;font-size:0.82rem;color:#94a3b8;margin-bottom:16px">` +
-                    `<span>Branch: <strong style="color:#818cf8">${esc(mr.branch)} → ${esc(mr.targetBranch)}</strong></span>` +
-                    `<span>Autor: <strong>${esc(mr.author?.name || '')}</strong></span>` +
+                `<h2 style="font-size:1.15rem;margin:0 0 12px 0;color:#e2e8f0">${esc(mr.title)}</h2>` +
+                `<div style="font-size:0.82rem;color:#94a3b8;margin-bottom:16px">` +
+                    `<span>Branch: <strong style="color:#818cf8">${esc(mr.branch)} → ${esc(mr.targetBranch)}</strong></span> &nbsp;|&nbsp; ` +
+                    `<span>Autor: <strong>${esc(mr.author?.name || '')}</strong></span> &nbsp;|&nbsp; ` +
                     `<span>Data: <strong>${new Date().toLocaleDateString('pt-BR')}</strong></span>` +
                 `</div>` +
-                `<div style="display:flex;align-items:center;gap:20px">` +
-                    `<div style="width:80px;height:80px;border-radius:50%;border:4px solid ${g.color};display:flex;align-items:center;justify-content:center;font-size:1.8rem;font-weight:800;color:${g.color};flex-shrink:0">${mr.aiScore ?? '—'}</div>` +
-                    `<div><div style="font-size:1rem;font-weight:700;color:${g.color};margin-bottom:4px">${g.label}</div><div style="font-size:0.82rem;color:#94a3b8">${g.description}</div></div>` +
-                `</div>` +
+                `<table style="border:none;border-collapse:collapse"><tr>` +
+                    `<td style="width:90px;vertical-align:middle;padding-right:16px"><div style="width:80px;height:80px;border-radius:50%;border:4px solid ${g.color};text-align:center;line-height:72px;font-size:1.8rem;font-weight:800;color:${g.color}">${mr.aiScore ?? '—'}</div></td>` +
+                    `<td style="vertical-align:middle"><div style="font-size:1rem;font-weight:700;color:${g.color};margin-bottom:4px">${g.label}</div><div style="font-size:0.82rem;color:#94a3b8">${g.description}</div></td>` +
+                `</tr></table>` +
             `</div>` +
             catsHtml + issuesHtml + diffHtml +
-            (rulesHtml ? `<div style="margin-bottom:24px"><h3 style="font-size:1rem;margin-bottom:12px;color:#e2e8f0">Regras</h3>${rulesSummaryHtml}` + rulesHtml.replace('<div style="margin-bottom:24px"><h3 style="font-size:1rem;margin-bottom:12px;color:#e2e8f0">Regras</h3>', '') : '') +
-            `<div style="text-align:center;padding-top:16px;border-top:1px solid #1e293b;font-size:0.72rem;color:#475569">Gerado por Codexify AI — ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}</div>`;
+            (rulesHtml ? `<div style="margin-bottom:24px"><h3 style="font-size:1rem;margin:0 0 12px 0;color:#e2e8f0">Regras</h3>${rulesSummaryHtml}` + rulesHtml.replace('<div style="margin-bottom:24px"><h3 style="font-size:1rem;margin-bottom:12px;color:#e2e8f0">Regras</h3>', '') : '') +
+            `<div style="text-align:center;padding-top:16px;border-top:1px solid #1e293b;font-size:0.72rem;color:#64748b">Gerado por Codexify AI — ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}</div>`;
 
-        document.body.appendChild(container);
-        window.scrollTo(0, 0);
+        iDoc.body.appendChild(container);
 
+        // Wait for iframe to finish rendering, then capture
         setTimeout(() => {
-            html2pdf().set({
+            const h2p = iframe.contentWindow.html2pdf || window.html2pdf;
+            if (!h2p) {
+                // Inject html2pdf into iframe if not available there
+                const scr = iDoc.createElement('script');
+                scr.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.2/html2pdf.bundle.min.js';
+                scr.onload = () => doCapture(iframe.contentWindow.html2pdf);
+                scr.onerror = () => { iframe.remove(); toast('Erro ao carregar lib PDF', 'error'); };
+                iDoc.head.appendChild(scr);
+            } else {
+                doCapture(h2p);
+            }
+        }, 200);
+
+        function doCapture(lib) {
+            lib().set({
                 margin: [8, 6, 8, 6],
                 filename: `codexify-report-${mr.title.replace(/[^a-z0-9]/gi, '-').slice(0, 40)}.pdf`,
                 image: { type: 'jpeg', quality: 0.95 },
-                html2canvas: { scale: 2, useCORS: true, backgroundColor: '#0f172a', scrollY: 0, windowWidth: 794 },
+                html2canvas: { scale: 2, backgroundColor: '#0f172a', logging: false },
                 jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
-            }).from(container).save().then(() => {
-                container.remove();
-                overlay.remove();
+            }).from(iDoc.body).save().then(() => {
+                iframe.remove();
                 toast('PDF exportado!');
-            }).catch(() => {
-                container.remove();
-                overlay.remove();
+            }).catch((e) => {
+                console.error('PDF error:', e);
+                iframe.remove();
                 toast('Erro ao gerar PDF', 'error');
             });
-        }, 300);
+        }
     }
 
     async function reanalyzeCurrentMR(mr) {

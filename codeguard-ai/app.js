@@ -20,28 +20,33 @@
         syncTokens();
         return { 'Content-Type': 'application/json', ...(TOKEN ? { Authorization: 'Bearer ' + TOKEN } : {}) };
     }
-    async function api(method, path, body) {
+    async function api(method, path, body, timeout) {
         syncTokens();
-        let r = await fetch(API + path, { method, headers: hdrs(), ...(body ? { body: JSON.stringify(body) } : {}) });
-        if (r.status === 204) return null;
+        const ctrl = new AbortController();
+        const tm = setTimeout(() => ctrl.abort(), timeout || 30000);
+        try {
+            let r = await fetch(API + path, { method, headers: hdrs(), signal: ctrl.signal, ...(body ? { body: JSON.stringify(body) } : {}) });
+            if (r.status === 204) return null;
 
-        // On 401, try to refresh the token once
-        if (r.status === 401 && window.CodexfyRefreshToken) {
-            const refreshed = await window.CodexfyRefreshToken();
-            if (refreshed) {
-                syncTokens();
-                r = await fetch(API + path, { method, headers: hdrs(), ...(body ? { body: JSON.stringify(body) } : {}) });
-                if (r.status === 204) return null;
-            } else {
-                // Refresh failed — force logout
-                if (window.CodexfyForceLogout) window.CodexfyForceLogout();
-                throw { message: 'Sessão expirada. Faça login novamente.' };
+            if (r.status === 401 && window.CodexfyRefreshToken) {
+                const refreshed = await window.CodexfyRefreshToken();
+                if (refreshed) {
+                    syncTokens();
+                    r = await fetch(API + path, { method, headers: hdrs(), signal: ctrl.signal, ...(body ? { body: JSON.stringify(body) } : {}) });
+                    if (r.status === 204) return null;
+                } else {
+                    if (window.CodexfyForceLogout) window.CodexfyForceLogout();
+                    throw { message: 'Sessão expirada. Faça login novamente.' };
+                }
             }
-        }
 
-        const d = await r.json().catch(() => ({}));
-        if (!r.ok) throw d;
-        return d;
+            const d = await r.json().catch(() => ({}));
+            if (!r.ok) throw d;
+            return d;
+        } catch (e) {
+            if (e.name === 'AbortError') throw { message: 'Servidor demorou para responder. Tente novamente.' };
+            throw e;
+        } finally { clearTimeout(tm); }
     }
     async function ensureAuth() {
         syncTokens();
@@ -265,7 +270,7 @@
         };
         pageContent.style.animation = 'none';
         pageContent.offsetHeight;
-        pageContent.style.animation = 'fadeIn 0.3s ease';
+        pageContent.style.animation = 'fadeIn 0.15s ease';
         (r[currentPage] || r.dashboard)();
         refreshIcons();
     }
@@ -366,7 +371,7 @@
             </div>
 
             <!-- Quick Actions (acima dos gráficos) -->
-            <div class="qa-row stagger-in" style="animation-delay:0.25s">
+            <div class="qa-row stagger-in" style="animation-delay:0.05s">
                 <button class="qa-card" id="qaBtnAddRepo">
                     <div class="qa-card-icon" style="background:rgba(129,140,248,0.1);color:#818cf8">${icon('folder-git-2', 20)}</div>
                     <span>Adicionar Repo</span>
@@ -387,7 +392,7 @@
 
             <!-- Atividade + Score + Atividade Recente -->
             <div class="dash-bottom-grid">
-                <div class="card stagger-in" style="animation-delay:0.3s">
+                <div class="card stagger-in" style="animation-delay:0.1s">
                     <div class="card-header">
                         <span class="card-title">${icon('bar-chart-2', 16)} Atividade</span>
                         <span class="card-badge" id="chartPeriodLabel">Últimos 7 dias</span>
@@ -397,14 +402,14 @@
                         <div id="scoreDistChart" style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border-color)">Carregando...</div>
                     </div>
                 </div>
-                <div class="card stagger-in" style="animation-delay:0.35s">
+                <div class="card stagger-in" style="animation-delay:0.12s">
                     <div class="card-header"><span class="card-title">${icon('activity', 16)} Atividade Recente</span></div>
                     <div class="card-body" style="padding:0;max-height:320px;overflow-y:auto"><div class="activity-list" id="activityList">Carregando...</div></div>
                 </div>
             </div>
 
             <!-- MR Table -->
-            <div class="card stagger-in" style="animation-delay:0.5s">
+            <div class="card stagger-in" style="animation-delay:0.15s">
                 <div class="card-header"><span class="card-title">${icon('git-pull-request', 16)} Merge Requests</span><span class="card-badge" id="mrCountBadge">...</span></div>
                 <div class="mr-table-container" id="mrTableContainer">Carregando...</div>
                 <div id="dashPagination"></div>
@@ -1306,6 +1311,24 @@
         circTitle.textContent = 'IA analisando ' + pending.length + ' arquivo(s)...';
         circLabel.textContent = 'Analisando...';
         let done = 0;
+        let displayedPct = 20;
+
+        // Smooth progress simulation — creeps forward while waiting for real updates
+        const simInterval = setInterval(() => {
+            if (displayedPct < 95) {
+                displayedPct += 0.3;
+                setPct(displayedPct);
+            }
+        }, 300);
+
+        const aiSteps = ['Preparando análise...', 'Processando arquivo...', 'Carregando regras...', 'Enviando para IA...', 'IA analisando código...', 'Processando resultados...', 'Salvando análise...'];
+        let stepIdx = 0;
+        const stepInterval = setInterval(() => {
+            if (stepIdx < aiSteps.length - 1 && done < pending.length) {
+                stepIdx++;
+                circLabel.textContent = aiSteps[stepIdx];
+            }
+        }, 5000);
 
         for (let poll = 0; poll < 180; poll++) {
             await new Promise(r => setTimeout(r, 1000));
@@ -1336,20 +1359,26 @@
                         const lbl = d.progress_label || 'analisando...';
                         row.querySelector('.file-status').textContent = lbl;
                         row.querySelector('.file-status').style.color = 'var(--accent-warning)';
+                        if (lbl && lbl !== 'analisando...') circLabel.textContent = lbl;
                     }
                 } catch (_) { allDone = false; }
             }
 
-            // Calculate total progress from all jobs (each contributes proportionally)
+            // Real progress from backend — jump ahead if real > simulated
             const totalProgress = pending.reduce((sum, j) => sum + (j.progress || 0), 0);
             const avgProgress = totalProgress / pending.length;
-            const pct = 20 + (avgProgress / 100) * 80;
-            setPct(pct);
-            circLabel.textContent = done < pending.length ? (jobs.find(j => j.progress > 0 && j.progress < 100) || {}).progress_label || 'Analisando...' : 'Finalizando...';
-            circTitle.textContent = done < pending.length ? 'IA analisando ' + pending.length + ' arquivo(s)...' : done + ' de ' + pending.length + ' concluído(s)';
+            const realPct = 20 + (avgProgress / 100) * 80;
+            if (realPct > displayedPct) displayedPct = realPct;
+            setPct(displayedPct);
+
+            if (done === pending.length) circTitle.textContent = done + ' de ' + pending.length + ' concluído(s)';
+            else circTitle.textContent = 'IA analisando ' + pending.length + ' arquivo(s)...';
 
             if (allDone) break;
         }
+
+        clearInterval(simInterval);
+        clearInterval(stepInterval);
 
         // Phase 3: Done — show results
         const ok = jobs.filter(j => j.status === 'completed');
@@ -2525,15 +2554,20 @@
         const evtSource = new EventSource(API + `/analyses/${analysisId}/stream`);
         let simulatedPct = 5;
         let realPct = 5;
+        let lastRealUpdate = Date.now();
         const simulateInterval = setInterval(() => {
+            const stalled = Date.now() - lastRealUpdate > 3000;
             if (simulatedPct < realPct - 1) {
                 simulatedPct += 1;
                 _updateProgressBar(simulatedPct);
             } else if (simulatedPct < realPct) {
                 simulatedPct = realPct;
                 _updateProgressBar(simulatedPct);
+            } else if (stalled && simulatedPct < 95) {
+                simulatedPct += 0.4;
+                _updateProgressBar(Math.round(simulatedPct));
             }
-        }, 200);
+        }, 250);
 
         function _updateProgressBar(pct) {
             const fill = $('upBarFill');
@@ -2558,7 +2592,7 @@
             const label = $('upStepLabel');
             const fill = $('upBarFill');
 
-            realPct = data.progress || realPct;
+            if (data.progress && data.progress > realPct) { realPct = data.progress; lastRealUpdate = Date.now(); }
             if (data.progress_label && label) label.textContent = data.progress_label;
 
             if (data.status === 'completed') {

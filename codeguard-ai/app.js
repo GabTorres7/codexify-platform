@@ -116,19 +116,19 @@
             try {
                 const repos = await api('GET', `/orgs/${ORG_ID}/repos`);
                 cachedRepos = repos || [];
-                const allMrs = [];
-                for (const repo of cachedRepos) {
-                    try {
-                        const resp = await api('GET', `/orgs/${ORG_ID}/repos/${repo.id}/mrs?limit=100`);
-                        const items = resp.items || resp || [];
-                        items.forEach(mr => { mr._repo_id = repo.id; mr._repo_name = repo.full_name; });
-                        allMrs.push(...items);
-                    } catch (_) {}
-                }
+                const results = await Promise.allSettled(
+                    cachedRepos.map(repo =>
+                        api('GET', `/orgs/${ORG_ID}/repos/${repo.id}/mrs?limit=100`).then(resp => {
+                            const items = resp.items || resp || [];
+                            items.forEach(mr => { mr._repo_id = repo.id; mr._repo_name = repo.full_name; });
+                            return items;
+                        })
+                    )
+                );
+                const allMrs = results.filter(r => r.status === 'fulfilled').flatMap(r => r.value);
                 if (allMrs.length) { cachedMRs = allMrs; useMockData = false; return allMrs; }
             } catch (_) {}
         }
-        // Fallback to mock
         useMockData = true;
         cachedMRs = getMockMRs();
         return cachedMRs;
@@ -448,11 +448,12 @@
 
         await ensureAuth();
 
-        // Parallel fetch: metrics + chart + activity
-        const [metricsRes, chartRes, activityRes] = await Promise.allSettled([
+        // Parallel fetch: metrics + chart + activity + MRs — tudo de uma vez
+        const [metricsRes, chartRes, activityRes, mrsRes] = await Promise.allSettled([
             api('GET', `/orgs/${ORG_ID}/dashboard/metrics`),
             api('GET', `/orgs/${ORG_ID}/dashboard/chart`),
             api('GET', `/orgs/${ORG_ID}/dashboard/activity?limit=10`),
+            loadAllMRs(),
         ]);
 
         // Metrics
@@ -499,11 +500,10 @@
             $('activityList').innerHTML = RECENT_ACTIVITY.map(a => `<div class="activity-item"><div class="activity-dot ${a.type}"></div><div class="activity-info"><div class="activity-text">${a.text}</div><div class="activity-time">${a.time}</div></div></div>`).join('');
         }
 
-        // MR Table with filters
-        try {
-            const mrs = await loadAllMRs();
-            dashMRs = mrs.map(normalizeMR);
-        } catch (_) {
+        // MR Table with filters (já carregado em paralelo)
+        if (mrsRes.status === 'fulfilled' && mrsRes.value && mrsRes.value.length) {
+            dashMRs = mrsRes.value.map(normalizeMR);
+        } else {
             dashMRs = typeof MERGE_REQUESTS !== 'undefined' ? MERGE_REQUESTS : [];
         }
 

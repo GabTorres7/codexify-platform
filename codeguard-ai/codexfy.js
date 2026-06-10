@@ -3,7 +3,7 @@
 'use strict';
 
 // ── API helpers (same base as app.js) ──
-const API_BASE = window.location.origin + '/api/v1';
+const API_BASE = 'https://codexify-1bud.onrender.com/api/v1';
 
 async function authApi(method, path, body) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };

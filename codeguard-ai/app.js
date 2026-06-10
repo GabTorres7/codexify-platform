@@ -1903,178 +1903,168 @@
 
     function exportAnalysisReport(mr) {
         if (typeof html2pdf === 'undefined') { toast('Biblioteca PDF não carregou. Recarregue a página.', 'error'); return; }
-        toast('Gerando PDF...');
+        toast('Gerando PDF — aguarde...');
         const g = AnalysisEngine.getScoreGrade(mr.aiScore);
         const cats = mr.analysisCategories || {};
         const hasCats = Object.keys(cats).length > 0;
-        const sevColors = { critical: '#f87171', danger: '#f87171', warning: '#fbbf24', info: '#60a5fa', suggestion: '#34d399' };
+        const SC = { critical: '#f87171', danger: '#f87171', warning: '#fbbf24', info: '#60a5fa', suggestion: '#34d399' };
 
-        // Build category bars
+        const sec = (title, icon, content) => `<div style="margin-bottom:28px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid #1e293b"><span style="font-size:1.1rem">${icon}</span><h3 style="font-size:0.95rem;font-weight:700;color:#e2e8f0;margin:0">${title}</h3></div>${content}</div>`;
+
+        // ── Categorias ──
         let catsHtml = '';
         if (hasCats) {
-            catsHtml = '<div style="margin-bottom:24px"><h3 style="font-size:1rem;margin-bottom:12px;color:#e2e8f0">Categorias</h3>' +
-                Object.entries(cats).map(([k, v]) => {
-                    const label = AnalysisEngine.getCategoryLabel(k);
-                    const barColor = v >= 65 ? '#34d399' : v >= 50 ? '#fbbf24' : '#f87171';
-                    return `<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;font-size:0.82rem;margin-bottom:4px;color:#cbd5e1"><span>${label}</span><span style="color:${barColor};font-weight:700">${v}/100</span></div><div style="background:#1e293b;border-radius:6px;height:8px;overflow:hidden"><div style="background:${barColor};height:100%;width:${v}%;border-radius:6px"></div></div></div>`;
-                }).join('') + '</div>';
+            catsHtml = sec('Categorias', '📊', Object.entries(cats).map(([k, v]) => {
+                const label = AnalysisEngine.getCategoryLabel(k);
+                const c = v >= 65 ? '#34d399' : v >= 50 ? '#fbbf24' : '#f87171';
+                return `<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:0.8rem;margin-bottom:5px"><span style="color:#cbd5e1">${label}</span><span style="color:${c};font-weight:700">${v}/100</span></div><div style="background:#1e293b;border-radius:4px;height:10px;overflow:hidden"><div style="background:${c};height:100%;width:${v}%;border-radius:4px"></div></div></div>`;
+            }).join(''));
         }
 
-        // Build issues list
+        // ── Issues ──
         let issuesHtml = '';
         if (mr.issues && mr.issues.length) {
-            issuesHtml = '<div style="margin-bottom:24px"><h3 style="font-size:1rem;margin-bottom:12px;color:#e2e8f0">Issues (' + mr.issues.length + ')</h3>' +
-                mr.issues.map(i => {
-                    const sev = i.severity || 'info';
-                    const col = sevColors[sev] || '#60a5fa';
-                    const file = i.file_path || i.file || '';
-                    return `<div style="background:#1e293b;border-left:3px solid ${col};border-radius:6px;padding:12px 14px;margin-bottom:8px">` +
-                        `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><span style="background:${col}22;color:${col};padding:2px 8px;border-radius:10px;font-size:0.7rem;font-weight:700;text-transform:uppercase">${sev}</span><span style="font-weight:600;font-size:0.85rem;color:#e2e8f0">${esc(i.title || '')}</span></div>` +
-                        (file ? `<div style="font-size:0.75rem;color:#64748b;margin-bottom:4px">${esc(file)}${i.line_ref ? ':' + i.line_ref : ''}</div>` : '') +
-                        (i.description ? `<div style="font-size:0.82rem;color:#94a3b8;margin-bottom:4px">${esc(i.description)}</div>` : '') +
-                        (i.suggestion ? `<div style="font-size:0.78rem;color:#34d399;background:#34d39910;padding:8px 10px;border-radius:4px;border-left:2px solid #34d399;margin-top:6px"><strong>Sugestão:</strong> ${esc(i.suggestion)}</div>` : '') +
-                        '</div>';
-                }).join('') + '</div>';
+            issuesHtml = sec('Análise da IA — Issues (' + mr.issues.length + ')', '🔍', mr.issues.map(i => {
+                const sev = i.severity || 'info';
+                const c = SC[sev] || '#60a5fa';
+                const file = i.file_path || i.file || '';
+                return `<div style="background:#1e293b;border-left:3px solid ${c};border-radius:8px;padding:14px 16px;margin-bottom:10px">` +
+                    `<div style="margin-bottom:6px"><span style="display:inline-block;background:${c}20;color:${c};padding:3px 10px;border-radius:12px;font-size:0.68rem;font-weight:800;text-transform:uppercase;letter-spacing:0.5px">${sev}</span> <span style="font-weight:600;font-size:0.85rem;color:#f1f5f9;margin-left:6px">${esc(i.title || '')}</span></div>` +
+                    (file ? `<div style="font-size:0.73rem;color:#64748b;margin-bottom:5px">📁 ${esc(file)}${i.line_ref ? ':' + i.line_ref : ''}</div>` : '') +
+                    (i.description ? `<div style="font-size:0.8rem;color:#94a3b8;line-height:1.5;margin-bottom:6px">${esc(i.description)}</div>` : '') +
+                    (i.suggestion ? `<div style="font-size:0.76rem;color:#34d399;background:#0d3326;padding:10px 12px;border-radius:6px;border-left:2px solid #34d399;margin-top:8px;line-height:1.5">💡 <strong>Sugestão:</strong> ${esc(i.suggestion)}</div>` : '') +
+                    '</div>';
+            }).join(''));
         }
 
-        // Build diff section
+        // ── Diff ──
         let diffHtml = '';
         if (mr.diff && mr.diff.length) {
-            diffHtml = '<div style="margin-bottom:24px"><h3 style="font-size:1rem;margin-bottom:12px;color:#e2e8f0">Diff</h3>' +
-                mr.diff.map(f => {
-                    const anns = f.annotations || [];
-                    const annotMap = {};
-                    anns.forEach(a => { annotMap[a.afterLine || a.after_line] = a; });
-                    const fileIssues = (mr.issues || []).filter(i => (i.file_path || i.file || '') === f.file);
-                    fileIssues.forEach(iss => {
-                        const line = parseInt(iss.line_ref || iss.lineRef || 0);
-                        if (!line) return;
-                        if (annotMap[line]) { if (iss.suggestion && !annotMap[line].suggestion) annotMap[line].suggestion = iss.suggestion; }
-                        else { annotMap[line] = { type: iss.severity === 'critical' ? 'danger' : iss.severity === 'warning' ? 'warning' : 'info', text: iss.title + (iss.description ? ' — ' + iss.description : ''), suggestion: iss.suggestion || '' }; }
-                    });
-
-                    let linesHtml = '';
-                    const diffText = f.diff_text || '';
-                    if (diffText) {
-                        const dLines = diffText.split('\n');
-                        let ln = 0;
-                        for (const dl of dLines) {
-                            if (dl.startsWith('diff --git') || dl.startsWith('---') || dl.startsWith('+++') || dl.startsWith('@@')) {
-                                linesHtml += `<div style="background:#334155;color:#64748b;padding:2px 12px;font-size:0.75rem">${esc(dl)}</div>`;
-                                if (dl.startsWith('@@')) { const m = dl.match(/@@ .+\+(\d+)/); if (m) ln = parseInt(m[1]) - 1; }
-                                continue;
-                            }
-                            ln++;
-                            const isAdd = dl.startsWith('+'), isRem = dl.startsWith('-');
-                            const content = isAdd || isRem ? dl.slice(1) : dl;
-                            const ann = annotMap[ln];
-                            let bg = isAdd ? 'rgba(52,211,153,0.08)' : isRem ? 'rgba(248,113,113,0.08)' : 'transparent';
-                            if (ann) bg = ann.type === 'danger' ? 'rgba(248,113,113,0.13)' : ann.type === 'warning' ? 'rgba(251,191,36,0.11)' : 'rgba(96,165,250,0.09)';
-                            linesHtml += `<div style="display:flex;background:${bg};font-size:0.75rem;line-height:1.6"><span style="width:40px;text-align:right;padding-right:8px;color:#475569;user-select:none;flex-shrink:0">${ln}</span><span style="flex:1;white-space:pre-wrap;word-break:break-all">${esc(content)}</span></div>`;
-                            if (ann) {
-                                const acol = ann.type === 'danger' ? '#f87171' : ann.type === 'warning' ? '#fbbf24' : '#60a5fa';
-                                const aLabel = ann.type === 'danger' ? 'PROBLEMA' : ann.type === 'warning' ? 'ATENÇÃO' : 'INFO';
-                                linesHtml += `<div style="background:${acol}0d;border-left:3px solid ${acol};padding:8px 12px 8px 50px;font-size:0.78rem"><span style="color:${acol};font-weight:700;font-size:0.7rem">${aLabel}</span> <span style="color:#94a3b8">${esc(ann.text || '')}</span>`;
-                                if (ann.suggestion) linesHtml += `<div style="color:#34d399;margin-top:4px;font-size:0.75rem"><strong>Sugestão:</strong> ${esc(ann.suggestion)}</div>`;
-                                linesHtml += '</div>';
-                            }
+            diffHtml = sec('Diff — Código Fonte', '📝', mr.diff.map(f => {
+                const anns = f.annotations || [];
+                const aMap = {};
+                anns.forEach(a => { aMap[a.afterLine || a.after_line] = a; });
+                (mr.issues || []).filter(i => (i.file_path || i.file || '') === f.file).forEach(iss => {
+                    const ln = parseInt(iss.line_ref || iss.lineRef || 0);
+                    if (!ln) return;
+                    if (aMap[ln]) { if (iss.suggestion && !aMap[ln].suggestion) aMap[ln].suggestion = iss.suggestion; }
+                    else { aMap[ln] = { type: iss.severity === 'critical' ? 'danger' : iss.severity === 'warning' ? 'warning' : 'info', text: iss.title + (iss.description ? ' — ' + iss.description : ''), suggestion: iss.suggestion || '' }; }
+                });
+                let lh = '';
+                const dt = f.diff_text || '';
+                if (dt) {
+                    let ln = 0;
+                    for (const dl of dt.split('\n')) {
+                        if (dl.startsWith('diff --git') || dl.startsWith('---') || dl.startsWith('+++') || dl.startsWith('@@')) {
+                            lh += `<div style="background:#334155;color:#94a3b8;padding:3px 12px;font-size:0.7rem;font-family:monospace">${esc(dl)}</div>`;
+                            if (dl.startsWith('@@')) { const m = dl.match(/@@ .+\+(\d+)/); if (m) ln = parseInt(m[1]) - 1; }
+                            continue;
+                        }
+                        ln++;
+                        const isA = dl.startsWith('+'), isR = dl.startsWith('-');
+                        const ct = isA || isR ? dl.slice(1) : dl;
+                        const an = aMap[ln];
+                        let bg = isA ? '#132a1e' : isR ? '#2a1318' : '#0f172a';
+                        if (an) bg = an.type === 'danger' ? '#2a1318' : an.type === 'warning' ? '#2a2413' : '#131e2a';
+                        const lbc = an ? (an.type === 'danger' ? '#f87171' : an.type === 'warning' ? '#fbbf24' : '#60a5fa') : 'transparent';
+                        lh += `<div style="display:flex;background:${bg};border-left:2px solid ${lbc};font-size:0.72rem;line-height:1.7;font-family:'JetBrains Mono',Consolas,monospace"><span style="width:36px;text-align:right;padding-right:8px;color:#475569;flex-shrink:0">${ln}</span><span style="flex:1;white-space:pre-wrap;word-break:break-all;color:#e2e8f0">${esc(ct)}</span></div>`;
+                        if (an) {
+                            const ac = an.type === 'danger' ? '#f87171' : an.type === 'warning' ? '#fbbf24' : '#60a5fa';
+                            const al = an.type === 'danger' ? '🔴 PROBLEMA' : an.type === 'warning' ? '🟡 ATENÇÃO' : '🔵 INFO';
+                            lh += `<div style="background:${ac}0d;border-left:3px solid ${ac};padding:8px 12px 8px 46px;font-size:0.74rem"><div style="margin-bottom:3px"><strong style="color:${ac};font-size:0.68rem">${al}</strong></div><div style="color:#94a3b8;line-height:1.5">${esc(an.text || '')}</div>`;
+                            if (an.suggestion) lh += `<div style="color:#34d399;margin-top:6px;padding:6px 8px;background:#0d3326;border-radius:4px;font-size:0.72rem;line-height:1.5">💡 <strong>Sugestão:</strong> ${esc(an.suggestion)}</div>`;
+                            lh += '</div>';
                         }
                     }
-                    return `<div style="background:#0f172a;border:1px solid #1e293b;border-radius:8px;overflow:hidden;margin-bottom:12px"><div style="background:#1e293b;padding:8px 14px;font-size:0.82rem;font-weight:600;color:#e2e8f0">${esc(f.file)}</div><div style="font-family:'JetBrains Mono',monospace;color:#e2e8f0">${linesHtml || '<div style="padding:12px;color:#475569">Sem código</div>'}</div></div>`;
-                }).join('') + '</div>';
+                }
+                return `<div style="border:1px solid #1e293b;border-radius:8px;overflow:hidden;margin-bottom:14px"><div style="background:#1e293b;padding:9px 14px;font-size:0.8rem;font-weight:600;color:#e2e8f0">📄 ${esc(f.file)}</div><div>${lh || '<div style="padding:12px;color:#475569;font-size:0.8rem">Sem código disponível</div>'}</div></div>`;
+            }).join(''));
         }
 
-        // Build rules table
+        // ── Regras ──
         let rulesHtml = '';
         if (mr.rules && mr.rules.length) {
-            const rIcons = { pass: '✓', fail: '✗', warn: '⚠' };
-            const rColors = { pass: '#34d399', fail: '#f87171', warn: '#fbbf24' };
-            rulesHtml = '<div style="margin-bottom:24px"><h3 style="font-size:1rem;margin-bottom:12px;color:#e2e8f0">Regras</h3>' +
-                mr.rules.map(r => {
-                    const st = r.status || 'warn';
-                    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:#1e293b;border-radius:6px;margin-bottom:6px"><span style="color:${rColors[st] || '#fbbf24'};font-weight:700;font-size:1.1rem;width:20px;text-align:center">${rIcons[st] || '⚠'}</span><div><div style="font-weight:600;font-size:0.85rem;color:#e2e8f0">${esc(r.name || r.rule_name || '')}</div>${r.description || r.desc ? `<div style="font-size:0.78rem;color:#64748b">${esc(r.description || r.desc)}</div>` : ''}</div></div>`;
-                }).join('') + '</div>';
-        }
-
-        // Build rules summary counts for PDF
-        let rulesSummaryHtml = '';
-        if (mr.rules && mr.rules.length) {
             const rc = AnalysisEngine.countRules(mr.rules.map(r => ({ status: r.status || 'warn' })));
-            rulesSummaryHtml = `<div style="display:flex;gap:16px;margin-bottom:16px">` +
-                `<div style="flex:1;background:#1e293b;border-radius:8px;padding:14px;text-align:center"><div style="font-size:1.5rem;font-weight:800;color:#34d399">${rc.pass}</div><div style="font-size:0.75rem;color:#94a3b8">Aprovadas</div></div>` +
-                `<div style="flex:1;background:#1e293b;border-radius:8px;padding:14px;text-align:center"><div style="font-size:1.5rem;font-weight:800;color:#f87171">${rc.fail}</div><div style="font-size:0.75rem;color:#94a3b8">Reprovadas</div></div>` +
-                `<div style="flex:1;background:#1e293b;border-radius:8px;padding:14px;text-align:center"><div style="font-size:1.5rem;font-weight:800;color:#fbbf24">${rc.warn}</div><div style="font-size:0.75rem;color:#94a3b8">Atenção</div></div>` +
-            `</div>`;
+            const ri = { pass: '✅', fail: '❌', warn: '⚠️' };
+            const rcol = { pass: '#34d399', fail: '#f87171', warn: '#fbbf24' };
+            const summary = `<table style="width:100%;border-collapse:collapse;margin-bottom:16px"><tr>` +
+                `<td style="width:33%;text-align:center;background:#132a1e;border-radius:8px;padding:14px"><div style="font-size:1.6rem;font-weight:800;color:#34d399">${rc.pass}</div><div style="font-size:0.73rem;color:#94a3b8;margin-top:2px">Aprovadas</div></td>` +
+                `<td style="width:8px"></td>` +
+                `<td style="width:33%;text-align:center;background:#2a1318;border-radius:8px;padding:14px"><div style="font-size:1.6rem;font-weight:800;color:#f87171">${rc.fail}</div><div style="font-size:0.73rem;color:#94a3b8;margin-top:2px">Reprovadas</div></td>` +
+                `<td style="width:8px"></td>` +
+                `<td style="width:33%;text-align:center;background:#2a2413;border-radius:8px;padding:14px"><div style="font-size:1.6rem;font-weight:800;color:#fbbf24">${rc.warn}</div><div style="font-size:0.73rem;color:#94a3b8;margin-top:2px">Atenção</div></td>` +
+            `</tr></table>`;
+            const list = mr.rules.map(r => {
+                const st = r.status || 'warn';
+                return `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#1e293b;border-radius:8px;margin-bottom:6px"><span style="font-size:1rem;flex-shrink:0">${ri[st] || '⚠️'}</span><div style="flex:1"><div style="font-weight:600;font-size:0.82rem;color:#e2e8f0">${esc(r.name || r.rule_name || '')}</div>${r.description || r.desc ? `<div style="font-size:0.74rem;color:#64748b;margin-top:2px">${esc(r.description || r.desc)}</div>` : ''}</div><span style="color:${rcol[st]};font-size:0.7rem;font-weight:700;text-transform:uppercase">${st === 'pass' ? 'APROVADA' : st === 'fail' ? 'REPROVADA' : 'ATENÇÃO'}</span></div>`;
+            }).join('');
+            rulesHtml = sec('Regras de Qualidade', '📋', summary + list);
         }
 
-        // Create an iframe to isolate the PDF content — html2canvas needs visible, in-flow DOM
+        // ── Score header ──
+        const scoreColor = g.color;
+        const scoreHtml = `<div style="background:linear-gradient(135deg,#1e293b 0%,#0f172a 100%);border:1px solid #334155;border-radius:12px;padding:24px;margin-bottom:28px;text-align:center">` +
+            `<div style="display:inline-block;width:100px;height:100px;border-radius:50%;border:5px solid ${scoreColor};line-height:90px;font-size:2.2rem;font-weight:900;color:${scoreColor};margin-bottom:12px">${mr.aiScore ?? '—'}</div>` +
+            `<div style="font-size:1.1rem;font-weight:800;color:${scoreColor};margin-bottom:4px">${g.label}</div>` +
+            `<div style="font-size:0.82rem;color:#94a3b8;max-width:500px;margin:0 auto;line-height:1.5">${g.description}</div>` +
+        `</div>`;
+
+        // ── Assemble ──
+        const bodyHtml = `
+            <div style="text-align:center;margin-bottom:8px">
+                <div style="font-size:1.8rem;font-weight:900;color:#818cf8;letter-spacing:-0.5px">Codexify</div>
+                <div style="font-size:0.7rem;color:#64748b;letter-spacing:3px;text-transform:uppercase;margin-top:2px">Relatório de Análise de Código</div>
+            </div>
+            <div style="height:1px;background:linear-gradient(90deg,transparent,#818cf8,transparent);margin:16px 0 24px 0"></div>
+            <div style="background:#1e293b;border-radius:10px;padding:16px 20px;margin-bottom:24px">
+                <h2 style="font-size:1.1rem;margin:0 0 10px 0;color:#f1f5f9;font-weight:700">${esc(mr.title)}</h2>
+                <table style="border-collapse:collapse;font-size:0.8rem;color:#94a3b8"><tr>
+                    <td style="padding-right:20px">Branch: <strong style="color:#818cf8">${esc(mr.branch)} → ${esc(mr.targetBranch)}</strong></td>
+                    <td style="padding-right:20px">Autor: <strong style="color:#e2e8f0">${esc(mr.author?.name || '')}</strong></td>
+                    <td>Data: <strong style="color:#e2e8f0">${new Date().toLocaleDateString('pt-BR')}</strong></td>
+                </tr></table>
+            </div>
+            ${scoreHtml}
+            ${catsHtml}
+            ${issuesHtml}
+            ${diffHtml}
+            ${rulesHtml}
+            <div style="text-align:center;padding-top:20px;margin-top:12px;border-top:1px solid #1e293b">
+                <div style="font-size:0.68rem;color:#475569">Gerado por <strong style="color:#818cf8">Codexify AI</strong> — ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}</div>
+            </div>`;
+
+        // ── Render in iframe ──
         const iframe = document.createElement('iframe');
-        iframe.style.cssText = 'position:fixed;top:0;left:0;width:800px;height:600px;z-index:99999;border:none;opacity:0;';
+        iframe.style.cssText = 'position:fixed;top:0;left:0;width:810px;height:100px;z-index:99999;border:none;opacity:0;pointer-events:none;';
         document.body.appendChild(iframe);
 
         const iDoc = iframe.contentDocument || iframe.contentWindow.document;
         iDoc.open();
-        iDoc.write(`<!DOCTYPE html><html><head><style>
-            * { margin:0; padding:0; box-sizing:border-box; }
-            body { background:#0f172a; color:#e2e8f0; font-family:Inter,Arial,Helvetica,sans-serif; padding:28px 24px; width:794px; }
-        </style></head><body></body></html>`);
+        iDoc.write(`<!DOCTYPE html><html><head><style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0f172a;color:#e2e8f0;font-family:Inter,Arial,Helvetica,sans-serif;padding:32px 28px;width:794px}</style></head><body>${bodyHtml}</body></html>`);
         iDoc.close();
 
-        const container = iDoc.createElement('div');
-        container.innerHTML =
-            `<div style="text-align:center;margin-bottom:28px">` +
-                `<div style="font-size:1.6rem;font-weight:800;color:#818cf8;margin-bottom:4px">Codexify</div>` +
-                `<div style="font-size:0.75rem;color:#64748b;letter-spacing:2px;text-transform:uppercase">Relatório de Análise</div>` +
-            `</div>` +
-            `<div style="background:#1e293b;border-radius:10px;padding:20px;margin-bottom:24px">` +
-                `<h2 style="font-size:1.15rem;margin:0 0 12px 0;color:#e2e8f0">${esc(mr.title)}</h2>` +
-                `<div style="font-size:0.82rem;color:#94a3b8;margin-bottom:16px">` +
-                    `<span>Branch: <strong style="color:#818cf8">${esc(mr.branch)} → ${esc(mr.targetBranch)}</strong></span> &nbsp;|&nbsp; ` +
-                    `<span>Autor: <strong>${esc(mr.author?.name || '')}</strong></span> &nbsp;|&nbsp; ` +
-                    `<span>Data: <strong>${new Date().toLocaleDateString('pt-BR')}</strong></span>` +
-                `</div>` +
-                `<table style="border:none;border-collapse:collapse"><tr>` +
-                    `<td style="width:90px;vertical-align:middle;padding-right:16px"><div style="width:80px;height:80px;border-radius:50%;border:4px solid ${g.color};text-align:center;line-height:72px;font-size:1.8rem;font-weight:800;color:${g.color}">${mr.aiScore ?? '—'}</div></td>` +
-                    `<td style="vertical-align:middle"><div style="font-size:1rem;font-weight:700;color:${g.color};margin-bottom:4px">${g.label}</div><div style="font-size:0.82rem;color:#94a3b8">${g.description}</div></td>` +
-                `</tr></table>` +
-            `</div>` +
-            catsHtml + issuesHtml + diffHtml +
-            (rulesHtml ? `<div style="margin-bottom:24px"><h3 style="font-size:1rem;margin:0 0 12px 0;color:#e2e8f0">Regras</h3>${rulesSummaryHtml}` + rulesHtml.replace('<div style="margin-bottom:24px"><h3 style="font-size:1rem;margin-bottom:12px;color:#e2e8f0">Regras</h3>', '') : '') +
-            `<div style="text-align:center;padding-top:16px;border-top:1px solid #1e293b;font-size:0.72rem;color:#64748b">Gerado por Codexify AI — ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}</div>`;
-
-        iDoc.body.appendChild(container);
-
-        // Wait for iframe to finish rendering, then capture
+        // Resize iframe to full content height so html2canvas captures everything
         setTimeout(() => {
-            const h2p = iframe.contentWindow.html2pdf || window.html2pdf;
-            if (!h2p) {
-                // Inject html2pdf into iframe if not available there
+            const fullH = iDoc.body.scrollHeight + 60;
+            iframe.style.height = fullH + 'px';
+
+            setTimeout(() => {
                 const scr = iDoc.createElement('script');
                 scr.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.2/html2pdf.bundle.min.js';
-                scr.onload = () => doCapture(iframe.contentWindow.html2pdf);
+                scr.onload = () => {
+                    iframe.contentWindow.html2pdf().set({
+                        margin: [10, 8, 10, 8],
+                        filename: `codexify-report-${mr.title.replace(/[^a-z0-9]/gi, '-').slice(0, 40)}.pdf`,
+                        image: { type: 'jpeg', quality: 0.98 },
+                        html2canvas: { scale: 2, backgroundColor: '#0f172a', logging: false, height: fullH, windowHeight: fullH },
+                        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                        pagebreak: { mode: ['css', 'legacy'] },
+                    }).from(iDoc.body).save().then(() => { iframe.remove(); toast('PDF exportado!'); }).catch(() => { iframe.remove(); toast('Erro ao gerar PDF', 'error'); });
+                };
                 scr.onerror = () => { iframe.remove(); toast('Erro ao carregar lib PDF', 'error'); };
                 iDoc.head.appendChild(scr);
-            } else {
-                doCapture(h2p);
-            }
-        }, 200);
-
-        function doCapture(lib) {
-            lib().set({
-                margin: [8, 6, 8, 6],
-                filename: `codexify-report-${mr.title.replace(/[^a-z0-9]/gi, '-').slice(0, 40)}.pdf`,
-                image: { type: 'jpeg', quality: 0.95 },
-                html2canvas: { scale: 2, backgroundColor: '#0f172a', logging: false },
-                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-            }).from(iDoc.body).save().then(() => {
-                iframe.remove();
-                toast('PDF exportado!');
-            }).catch((e) => {
-                console.error('PDF error:', e);
-                iframe.remove();
-                toast('Erro ao gerar PDF', 'error');
-            });
-        }
+            }, 200);
+        }, 100);
     }
 
     async function reanalyzeCurrentMR(mr) {

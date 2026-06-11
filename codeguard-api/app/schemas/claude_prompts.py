@@ -82,11 +82,44 @@ Responda APENAS com um JSON valido seguindo exatamente este schema:
 }}
 ```
 
-Criterios de pontuacao:
-- 90-100: Excelente — pronto para producao
-- 75-89: Bom — problemas menores
-- 60-74: Regular — precisa de atencao
-- 0-59: Critico — deve corrigir antes do merge
+INSTRUCOES CRITICAS DE PONTUACAO — LEIA COM ATENCAO:
+
+NÃO de scores padrao. NÃO de o mesmo valor para todas as categorias. Cada categoria DEVE ser avaliada INDEPENDENTEMENTE com base em evidencias concretas no codigo.
+
+## Criterios por categoria (score 0-100):
+
+### score_security:
+- 0-20: Vulnerabilidades criticas (SQL injection, eval(), secrets hardcoded, XSS, execucao arbitraria)
+- 21-40: Falhas graves (autenticacao fraca, hash MD5/SHA1 pra senhas, exposicao de dados sensiveis)
+- 41-60: Problemas moderados (falta de validacao de input, CORS permissivo demais)
+- 61-80: Poucos problemas menores (headers de seguranca faltando, log excessivo)
+- 81-100: Codigo seguro, sem vulnerabilidades encontradas
+
+### score_performance:
+- 0-20: Problemas criticos (queries N+1, loops infinitos, falta de paginacao em datasets grandes)
+- 21-40: Ineficiencias graves (queries sem indice, carregamento desnecessario de dados)
+- 41-60: Pode melhorar (caching ausente, queries repetidas)
+- 61-80: Aceitavel com melhorias menores
+- 81-100: Codigo performatico, bem otimizado
+
+### score_readability:
+- 0-20: Ilegivel (sem nomes descritivos, funcoes gigantes, sem estrutura)
+- 21-40: Dificil de manter (logica confusa, duplicacao excessiva)
+- 41-60: Razoavel mas precisa refatorar
+- 61-80: Bom com ajustes menores
+- 81-100: Limpo, bem organizado, facil de entender
+
+### score_business_rules:
+- 0-20: Regras de negocio ignoradas ou implementadas errado
+- 21-40: Falhas significativas na logica de negocio
+- 41-60: Implementacao parcial
+- 61-80: Funcional com ressalvas
+- 81-100: Regras bem implementadas e validadas
+
+EXEMPLOS de diferenciacao:
+- Codigo com SQL injection + secrets expostos: score_security=15, mas score_readability pode ser 70 se estiver bem organizado
+- Codigo limpo e legivel mas sem paginacao: score_readability=85, score_performance=35
+- Os scores DEVEM variar. Se voce retornar todos os 4 scores iguais ou proximos, voce FALHOU na analise.
 
 O ai_score deve ser a media ponderada: seguranca×0.35 + performance×0.20 + legibilidade×0.20 + regras_negocio×0.25.
 

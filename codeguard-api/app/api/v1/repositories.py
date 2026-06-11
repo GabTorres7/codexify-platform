@@ -4,8 +4,10 @@ Repository management:
   - Bulk add many repos (enterprise)
   - List, update, delete
   - Manual sync trigger
+  - Whole-repo analysis
 """
 import secrets
+from datetime import UTC, datetime
 from uuid import UUID
 
 import structlog
@@ -22,10 +24,12 @@ from app.models.repository import (
     RepositoryOut,
     RepositoryUpdate,
 )
+from app.services.analysis_service import AnalysisService
 from app.services.git_platform_factory import get_git_service
 
 logger = structlog.get_logger()
 settings = get_settings()
+_analysis_svc = AnalysisService()
 
 router = APIRouter(prefix="/orgs/{org_id}/repos", tags=["Repositories"])
 
@@ -162,7 +166,7 @@ async def list_available_repos(
     return {"repos": repos, "already_added": already_added}
 
 
-@router.get("", response_model=list[RepositoryOut])
+@router.get("")
 async def list_repositories(
     org_id: UUID,
     active_only: bool = Query(False),
@@ -178,7 +182,21 @@ async def list_repositories(
     if active_only:
         query = query.eq("is_active", True)
     resp = await query.execute()
-    return resp.data or []
+    repos = resp.data or []
+
+    for repo in repos:
+        mr_resp = (
+            await db.table("merge_requests")
+            .select("ai_score")
+            .eq("repo_id", repo["id"])
+            .not_.is_("ai_score", "null")
+            .execute()
+        )
+        scores = [r["ai_score"] for r in (mr_resp.data or []) if r.get("ai_score") is not None]
+        repo["avg_score"] = round(sum(scores) / len(scores)) if scores else None
+        repo["total_analyses"] = len(scores)
+
+    return repos
 
 
 @router.get("/{repo_id}", response_model=RepositoryOut)
@@ -293,6 +311,127 @@ async def get_repo_rules(
     if active_only:
         return await svc.get_effective_rules(org_id, repo_id)
     return await svc.list_rules(org_id, repo_id=repo_id)
+
+
+@router.post("/{repo_id}/analyze", status_code=202)
+async def analyze_repository(
+    org_id: UUID,
+    repo_id: UUID,
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(get_current_user),
+):
+    """Analyze the entire repository's source code (not just a MR diff)."""
+    db = await get_supabase()
+    repo_resp = (
+        await db.table("repositories")
+        .select("*")
+        .eq("id", str(repo_id))
+        .eq("org_id", str(org_id))
+        .execute()
+    )
+    if not repo_resp.data:
+        raise NotFoundError("Repository", str(repo_id))
+
+    repo = repo_resp.data[0]
+
+    mr_resp = await db.table("merge_requests").insert({
+        "repo_id": str(repo_id),
+        "platform_id": f"repo-analysis-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}",
+        "title": f"Análise completa: {repo['full_name']}",
+        "description": "Análise automática do repositório inteiro",
+        "branch": repo.get("default_branch", "main"),
+        "target_branch": repo.get("default_branch", "main"),
+        "author_name": current_user.get("name", "System"),
+        "author_username": current_user.get("email", "system"),
+        "status": "analyzing",
+        "files_changed": 0,
+        "additions": 0,
+        "deletions": 0,
+        "comments": 0,
+    }).execute()
+    mr_id = mr_resp.data[0]["id"]
+
+    analysis_resp = await db.table("analyses").insert({
+        "mr_id": mr_id,
+        "status": "queued",
+    }).execute()
+    analysis_id = analysis_resp.data[0]["id"]
+
+    background_tasks.add_task(_run_repo_analysis, repo, mr_id, analysis_id)
+    return {"message": "Análise do repositório iniciada", "analysis_id": analysis_id}
+
+
+async def _run_repo_analysis(repo: dict, mr_id: str, analysis_id: str) -> None:
+    """Background: fetch repo files and run AI analysis."""
+    db = await get_supabase()
+    try:
+        await db.table("analyses").update({
+            "status": "running",
+            "started_at": datetime.now(UTC).isoformat(),
+        }).eq("id", analysis_id).execute()
+
+        git_svc = get_git_service(repo["platform"], repo["access_token"])
+        files_diff = await git_svc.fetch_repo_files(
+            repo["full_name"], repo.get("default_branch", "main")
+        )
+
+        if not files_diff:
+            raise Exception("Nenhum arquivo fonte encontrado no repositório")
+
+        claude_result = await _analysis_svc._ai.analyze_merge_request(
+            mr_title=f"Análise completa: {repo['full_name']}",
+            mr_description="Análise de qualidade do repositório inteiro",
+            files_diff=files_diff,
+            rules=[],
+        )
+
+        from app.services.analysis_service import compute_weighted_score
+        ai_score = compute_weighted_score(claude_result)
+        claude_result["ai_score"] = ai_score
+        claude_result["_files_diff"] = files_diff
+
+        now = datetime.now(UTC).isoformat()
+        new_status = "approved" if ai_score >= repo.get("min_score", 50) else "issues"
+
+        await db.table("analyses").update({
+            "status": "completed",
+            "ai_score": ai_score,
+            "score_security": claude_result.get("score_security"),
+            "score_performance": claude_result.get("score_performance"),
+            "score_readability": claude_result.get("score_readability"),
+            "score_business_rules": claude_result.get("score_business_rules"),
+            "raw_claude_response": claude_result,
+            "completed_at": now,
+        }).eq("id", analysis_id).execute()
+
+        if claude_result.get("issues"):
+            await db.table("analysis_issues").insert([
+                {
+                    "analysis_id": analysis_id,
+                    "severity": i.get("severity", "info"),
+                    "title": i.get("title", ""),
+                    "description": i.get("description"),
+                    "file_path": i.get("file_path"),
+                    "line_ref": i.get("line_ref"),
+                    "suggestion": i.get("suggestion"),
+                }
+                for i in claude_result["issues"]
+            ]).execute()
+
+        await db.table("merge_requests").update({
+            "status": new_status, "ai_score": ai_score, "updated_at": now,
+        }).eq("id", mr_id).execute()
+
+        logger.info("repo_analysis_completed", repo=repo["full_name"], ai_score=ai_score)
+
+    except Exception as exc:
+        logger.error("repo_analysis_failed", repo=repo["full_name"], error=str(exc))
+        await db.table("analyses").update({
+            "status": "failed",
+            "error_message": str(exc),
+            "completed_at": datetime.now(UTC).isoformat(),
+        }).eq("id", analysis_id).execute()
+        await db.table("merge_requests").update({"status": "issues"}).eq("id", mr_id).execute()
 
 
 async def _sync_mrs_bg(repo: dict) -> None:

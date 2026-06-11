@@ -174,6 +174,36 @@ class GitHubService:
                 f"{GITHUB_API}/repos/{full_name}/hooks/{webhook_id}"
             )
 
+    async def fetch_repo_files(self, full_name: str, branch: str = "main", max_files: int = 10) -> list[dict]:
+        """Fetch source files from a repo for whole-repo analysis."""
+        source_exts = {".py", ".js", ".ts", ".jsx", ".tsx", ".java", ".go", ".rb", ".rs", ".php", ".c", ".cpp", ".cs"}
+        async with self._client() as client:
+            resp = await client.get(
+                f"{GITHUB_API}/repos/{full_name}/git/trees/{branch}",
+                params={"recursive": "1"},
+            )
+            if not resp.is_success:
+                raise GitPlatformError("github", f"Failed to fetch tree: {resp.status_code}")
+            tree = resp.json().get("tree", [])
+            source_files = [
+                f for f in tree
+                if f["type"] == "blob" and any(f["path"].endswith(ext) for ext in source_exts)
+            ]
+            source_files = source_files[:max_files]
+
+            files = []
+            for f in source_files:
+                content_resp = await client.get(
+                    f"{GITHUB_API}/repos/{full_name}/contents/{f['path']}",
+                    params={"ref": branch},
+                    headers={**self._headers, "Accept": "application/vnd.github.raw+json"},
+                )
+                if content_resp.is_success:
+                    text = content_resp.text[:8000]
+                    lines = "\n".join(f"+{line}" for line in text.splitlines())
+                    files.append({"file": f["path"], "diff_text": lines})
+            return files
+
     def _map_pr(self, pr: dict) -> MRData:
         return MRData(
             platform_id=str(pr["number"]),

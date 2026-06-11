@@ -180,7 +180,7 @@ class AnalysisService:
     ) -> None:
         now = datetime.now(UTC).isoformat()
         ai_score = result["ai_score"]
-        new_status = "approved" if ai_score >= repo.get("min_score", 75) else "issues"
+        new_status = "approved" if ai_score >= repo.get("min_score", 50) else "issues"
 
         # Update analysis record
         await db.table("analyses").update(
@@ -375,7 +375,7 @@ class AnalysisService:
             claude_result["_files_diff"] = files_diff
 
             # Persist results (using a virtual "repo" dict for compatibility)
-            virtual_repo = {"min_score": 75, "org_id": None, "id": None}
+            virtual_repo = {"min_score": 50, "org_id": None, "id": None}
             if mr.get("author_username"):
                 user_resp2 = (
                     await db.table("users")
@@ -388,7 +388,7 @@ class AnalysisService:
                     virtual_repo["org_id"] = user_resp2.data[0]["org_id"]  # type: ignore[index]
 
             now = datetime.now(UTC).isoformat()
-            new_status = "approved" if ai_score >= 75 else "issues"
+            new_status = "approved" if ai_score >= 50 else "issues"
 
             await self._update_progress(db, analysis_id, 85, "Salvando análise...")
 

@@ -909,9 +909,13 @@
                     </div>
                     <div class="repo-card-name">${esc(r.full_name)}</div>
                     <div class="repo-card-branch">Branch: ${r.default_branch}</div>
-                    <div class="repo-card-footer">
-                        <span style="color:${r.auto_analyze ? 'var(--accent-success)' : 'var(--text-tertiary)'}">${r.auto_analyze ? icon('check-circle', 14) + ' Auto-Análise' : icon('circle', 14) + ' Manual'}</span>
-                        <span>Score min: ${r.min_score}</span>
+                    <div class="repo-card-footer" style="flex-direction:column;gap:8px">
+                        <div style="display:flex;justify-content:space-between;width:100%">
+                            <span style="color:${r.auto_analyze ? 'var(--accent-success)' : 'var(--text-tertiary)'}">${r.auto_analyze ? icon('check-circle', 14) + ' Auto-Análise' : icon('circle', 14) + ' Manual'}</span>
+                            <span>Score min: ${r.min_score}</span>
+                        </div>
+                        ${r.avg_score != null ? `<div style="display:flex;align-items:center;gap:8px;width:100%"><div style="flex:1;background:var(--bg-tertiary);border-radius:4px;height:6px;overflow:hidden"><div style="background:${r.avg_score >= 65 ? 'var(--accent-success)' : r.avg_score >= 50 ? 'var(--accent-warning)' : 'var(--accent-danger)'};height:100%;width:${r.avg_score}%;border-radius:4px"></div></div><span style="font-size:0.75rem;font-weight:700;color:${r.avg_score >= 65 ? 'var(--accent-success)' : r.avg_score >= 50 ? 'var(--accent-warning)' : 'var(--accent-danger)'}">${r.avg_score}/100</span></div>` : ''}
+                        ${isAdmin() ? `<button class="btn btn-sm" style="width:100%;background:var(--accent-primary);color:white;border:none;padding:6px;border-radius:6px;font-size:0.78rem;font-weight:600;cursor:pointer" data-analyze-repo="${r.id}">🔍 Analisar Repositório</button>` : ''}
                     </div>
                 </div>
             `).join('')}</div>
@@ -933,6 +937,10 @@
         c.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', async () => {
             if (!confirm('Remover este repositório e todos os seus dados?')) return;
             try { await api('DELETE', `/orgs/${ORG_ID}/repos/${b.dataset.del}`); toast('Removido!'); loadRepos(); } catch (e) { toast(e.message || 'Erro', 'error'); }
+        }));
+        c.querySelectorAll('[data-analyze-repo]').forEach(b => b.addEventListener('click', async () => {
+            b.disabled = true; b.textContent = '⏳ Analisando...';
+            try { await api('POST', `/orgs/${ORG_ID}/repos/${b.dataset.analyzeRepo}/analyze`); toast('Análise do repositório iniciada! Aguarde alguns segundos e recarregue.'); } catch (e) { toast(e.message || 'Erro ao analisar', 'error'); } b.disabled = false; b.textContent = '🔍 Analisar Repositório';
         }));
         refreshIcons();
     }
@@ -2522,7 +2530,7 @@
         pageContent.innerHTML = `<h1 class="page-title">Configurações</h1><p class="page-subtitle">Integrações e preferências — Codexify AI</p>
             <div id="settingsContainer">${showLoading()}</div>`;
 
-        let settings = { auto_analyze: true, min_score_threshold: 75, notification_email: '', slack_webhook_url: '', discord_webhook_url: '' };
+        let settings = { auto_analyze: true, min_score_threshold: 50, notification_email: '', slack_webhook_url: '', discord_webhook_url: '' };
         try {
             await ensureAuth();
             const s = await api('GET', `/orgs/${ORG_ID}/settings`);

@@ -10,7 +10,7 @@ class RepositoryCreate(BaseModel):
     access_token: str
     default_branch: str = "main"
     auto_analyze: bool = True
-    min_score: int = 75
+    min_score: int = 50
 
     @field_validator("platform")
     @classmethod

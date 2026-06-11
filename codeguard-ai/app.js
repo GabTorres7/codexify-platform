@@ -939,8 +939,29 @@
             try { await api('DELETE', `/orgs/${ORG_ID}/repos/${b.dataset.del}`); toast('Removido!'); loadRepos(); } catch (e) { toast(e.message || 'Erro', 'error'); }
         }));
         c.querySelectorAll('[data-analyze-repo]').forEach(b => b.addEventListener('click', async () => {
+            const repoId = b.dataset.analyzeRepo;
             b.disabled = true; b.textContent = 'Analisando...';
-            try { await api('POST', `/orgs/${ORG_ID}/repos/${b.dataset.analyzeRepo}/analyze`); toast('Análise do repositório iniciada! Aguarde alguns segundos e recarregue.'); } catch (e) { toast(e.message || 'Erro ao analisar', 'error'); } b.disabled = false; b.textContent = 'Analisar Repositorio';
+            try {
+                const res = await api('POST', `/orgs/${ORG_ID}/repos/${repoId}/analyze`);
+                const mrId = res.mr_id;
+                toast('Análise iniciada! Aguarde...');
+                if (mrId) {
+                    let tries = 0;
+                    const poll = setInterval(async () => {
+                        tries++;
+                        try {
+                            const mr = await api('GET', `/orgs/${ORG_ID}/repos/${repoId}/mrs/${mrId}`);
+                            if (mr.status === 'approved' || mr.status === 'issues' || tries >= 30) {
+                                clearInterval(poll);
+                                b.disabled = false; b.textContent = 'Analisar Repositorio';
+                                openMRDetail(mrId, repoId);
+                            }
+                        } catch (_) {
+                            if (tries >= 30) { clearInterval(poll); b.disabled = false; b.textContent = 'Analisar Repositorio'; }
+                        }
+                    }, 3000);
+                } else { b.disabled = false; b.textContent = 'Analisar Repositorio'; }
+            } catch (e) { toast(e.message || 'Erro ao analisar', 'error'); b.disabled = false; b.textContent = 'Analisar Repositorio'; }
         }));
         refreshIcons();
     }
@@ -1916,7 +1937,7 @@
         const hasCats = Object.keys(cats).length > 0;
         const SC = { critical: '#f87171', danger: '#f87171', warning: '#fbbf24', info: '#60a5fa', suggestion: '#34d399' };
 
-        const sec = (title, icon, content) => `<div style="margin-bottom:28px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid #1e293b"><span style="font-size:1.1rem">${icon}</span><h3 style="font-size:0.95rem;font-weight:700;color:#e2e8f0;margin:0">${title}</h3></div>${content}</div>`;
+        const sec = (title, icon, content) => `<div style="margin-bottom:28px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid #e2e8f0"><span style="font-size:1.1rem">${icon}</span><h3 style="font-size:0.95rem;font-weight:700;color:#1e293b;margin:0">${title}</h3></div>${content}</div>`;
 
         // ── Categorias ──
         let catsHtml = '';
@@ -1924,7 +1945,7 @@
             catsHtml = sec('Categorias', '📊', Object.entries(cats).map(([k, v]) => {
                 const label = AnalysisEngine.getCategoryLabel(k);
                 const c = v >= 65 ? '#34d399' : v >= 50 ? '#fbbf24' : '#f87171';
-                return `<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:0.8rem;margin-bottom:5px"><span style="color:#cbd5e1">${label}</span><span style="color:${c};font-weight:700">${v}/100</span></div><div style="background:#1e293b;border-radius:4px;height:10px;overflow:hidden"><div style="background:${c};height:100%;width:${v}%;border-radius:4px"></div></div></div>`;
+                return `<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:0.8rem;margin-bottom:5px"><span style="color:#475569">${label}</span><span style="color:${c};font-weight:700">${v}/100</span></div><div style="background:#e2e8f0;border-radius:4px;height:10px;overflow:hidden"><div style="background:${c};height:100%;width:${v}%;border-radius:4px"></div></div></div>`;
             }).join(''));
         }
 
@@ -1935,11 +1956,11 @@
                 const sev = i.severity || 'info';
                 const c = SC[sev] || '#60a5fa';
                 const file = i.file_path || i.file || '';
-                return `<div style="background:#1e293b;border-left:3px solid ${c};border-radius:8px;padding:14px 16px;margin-bottom:10px">` +
-                    `<div style="margin-bottom:6px"><span style="display:inline-block;background:${c}20;color:${c};padding:3px 10px;border-radius:12px;font-size:0.68rem;font-weight:800;text-transform:uppercase;letter-spacing:0.5px">${sev}</span> <span style="font-weight:600;font-size:0.85rem;color:#f1f5f9;margin-left:6px">${esc(i.title || '')}</span></div>` +
+                return `<div style="background:#f8fafc;border-left:3px solid ${c};border-radius:8px;padding:14px 16px;margin-bottom:10px;border:1px solid #e2e8f0;border-left:3px solid ${c}">` +
+                    `<div style="margin-bottom:6px"><span style="display:inline-block;background:${c}20;color:${c};padding:3px 10px;border-radius:12px;font-size:0.68rem;font-weight:800;text-transform:uppercase;letter-spacing:0.5px">${sev}</span> <span style="font-weight:600;font-size:0.85rem;color:#1e293b;margin-left:6px">${esc(i.title || '')}</span></div>` +
                     (file ? `<div style="font-size:0.73rem;color:#64748b;margin-bottom:5px">📁 ${esc(file)}${i.line_ref ? ':' + i.line_ref : ''}</div>` : '') +
-                    (i.description ? `<div style="font-size:0.8rem;color:#94a3b8;line-height:1.5;margin-bottom:6px">${esc(i.description)}</div>` : '') +
-                    (i.suggestion ? `<div style="font-size:0.76rem;color:#34d399;background:#0d3326;padding:10px 12px;border-radius:6px;border-left:2px solid #34d399;margin-top:8px;line-height:1.5">💡 <strong>Sugestão:</strong> ${esc(i.suggestion)}</div>` : '') +
+                    (i.description ? `<div style="font-size:0.8rem;color:#475569;line-height:1.5;margin-bottom:6px">${esc(i.description)}</div>` : '') +
+                    (i.suggestion ? `<div style="font-size:0.76rem;color:#166534;background:#f0fdf4;padding:10px 12px;border-radius:6px;border-left:2px solid #34d399;margin-top:8px;line-height:1.5">💡 <strong>Sugestão:</strong> ${esc(i.suggestion)}</div>` : '') +
                     '</div>';
             }).join(''));
         }
@@ -1963,7 +1984,7 @@
                     let ln = 0;
                     for (const dl of dt.split('\n')) {
                         if (dl.startsWith('diff --git') || dl.startsWith('---') || dl.startsWith('+++') || dl.startsWith('@@')) {
-                            lh += `<div style="background:#334155;color:#94a3b8;padding:3px 12px;font-size:0.7rem;font-family:monospace">${esc(dl)}</div>`;
+                            lh += `<div style="background:#e2e8f0;color:#475569;padding:3px 12px;font-size:0.7rem;font-family:monospace">${esc(dl)}</div>`;
                             if (dl.startsWith('@@')) { const m = dl.match(/@@ .+\+(\d+)/); if (m) ln = parseInt(m[1]) - 1; }
                             continue;
                         }
@@ -1971,20 +1992,20 @@
                         const isA = dl.startsWith('+'), isR = dl.startsWith('-');
                         const ct = isA || isR ? dl.slice(1) : dl;
                         const an = aMap[ln];
-                        let bg = isA ? '#132a1e' : isR ? '#2a1318' : '#0f172a';
-                        if (an) bg = an.type === 'danger' ? '#2a1318' : an.type === 'warning' ? '#2a2413' : '#131e2a';
+                        let bg = isA ? '#dcfce7' : isR ? '#fee2e2' : '#ffffff';
+                        if (an) bg = an.type === 'danger' ? '#fee2e2' : an.type === 'warning' ? '#fef9c3' : '#dbeafe';
                         const lbc = an ? (an.type === 'danger' ? '#f87171' : an.type === 'warning' ? '#fbbf24' : '#60a5fa') : 'transparent';
-                        lh += `<div style="display:flex;background:${bg};border-left:2px solid ${lbc};font-size:0.72rem;line-height:1.7;font-family:'JetBrains Mono',Consolas,monospace"><span style="width:36px;text-align:right;padding-right:8px;color:#475569;flex-shrink:0">${ln}</span><span style="flex:1;white-space:pre-wrap;word-break:break-all;color:#e2e8f0">${esc(ct)}</span></div>`;
+                        lh += `<div style="display:flex;background:${bg};border-left:2px solid ${lbc};font-size:0.72rem;line-height:1.7;font-family:'JetBrains Mono',Consolas,monospace"><span style="width:36px;text-align:right;padding-right:8px;color:#94a3b8;flex-shrink:0">${ln}</span><span style="flex:1;white-space:pre-wrap;word-break:break-all;color:#1e293b">${esc(ct)}</span></div>`;
                         if (an) {
                             const ac = an.type === 'danger' ? '#f87171' : an.type === 'warning' ? '#fbbf24' : '#60a5fa';
                             const al = an.type === 'danger' ? '🔴 PROBLEMA' : an.type === 'warning' ? '🟡 ATENÇÃO' : '🔵 INFO';
-                            lh += `<div style="background:${ac}0d;border-left:3px solid ${ac};padding:8px 12px 8px 46px;font-size:0.74rem"><div style="margin-bottom:3px"><strong style="color:${ac};font-size:0.68rem">${al}</strong></div><div style="color:#94a3b8;line-height:1.5">${esc(an.text || '')}</div>`;
-                            if (an.suggestion) lh += `<div style="color:#34d399;margin-top:6px;padding:6px 8px;background:#0d3326;border-radius:4px;font-size:0.72rem;line-height:1.5">💡 <strong>Sugestão:</strong> ${esc(an.suggestion)}</div>`;
+                            lh += `<div style="background:${ac}0d;border-left:3px solid ${ac};padding:8px 12px 8px 46px;font-size:0.74rem"><div style="margin-bottom:3px"><strong style="color:${ac};font-size:0.68rem">${al}</strong></div><div style="color:#475569;line-height:1.5">${esc(an.text || '')}</div>`;
+                            if (an.suggestion) lh += `<div style="color:#166534;margin-top:6px;padding:6px 8px;background:#f0fdf4;border-radius:4px;font-size:0.72rem;line-height:1.5">💡 <strong>Sugestão:</strong> ${esc(an.suggestion)}</div>`;
                             lh += '</div>';
                         }
                     }
                 }
-                return `<div style="border:1px solid #1e293b;border-radius:8px;overflow:hidden;margin-bottom:14px"><div style="background:#1e293b;padding:9px 14px;font-size:0.8rem;font-weight:600;color:#e2e8f0">📄 ${esc(f.file)}</div><div>${lh || '<div style="padding:12px;color:#475569;font-size:0.8rem">Sem código disponível</div>'}</div></div>`;
+                return `<div style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-bottom:14px"><div style="background:#f1f5f9;padding:9px 14px;font-size:0.8rem;font-weight:600;color:#1e293b">📄 ${esc(f.file)}</div><div>${lh || '<div style="padding:12px;color:#64748b;font-size:0.8rem">Sem código disponível</div>'}</div></div>`;
             }).join(''));
         }
 
@@ -1995,40 +2016,40 @@
             const ri = { pass: '✅', fail: '❌', warn: '⚠️' };
             const rcol = { pass: '#34d399', fail: '#f87171', warn: '#fbbf24' };
             const summary = `<table style="width:100%;border-collapse:collapse;margin-bottom:16px"><tr>` +
-                `<td style="width:33%;text-align:center;background:#132a1e;border-radius:8px;padding:14px"><div style="font-size:1.6rem;font-weight:800;color:#34d399">${rc.pass}</div><div style="font-size:0.73rem;color:#94a3b8;margin-top:2px">Aprovadas</div></td>` +
+                `<td style="width:33%;text-align:center;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px"><div style="font-size:1.6rem;font-weight:800;color:#16a34a">${rc.pass}</div><div style="font-size:0.73rem;color:#475569;margin-top:2px">Aprovadas</div></td>` +
                 `<td style="width:8px"></td>` +
-                `<td style="width:33%;text-align:center;background:#2a1318;border-radius:8px;padding:14px"><div style="font-size:1.6rem;font-weight:800;color:#f87171">${rc.fail}</div><div style="font-size:0.73rem;color:#94a3b8;margin-top:2px">Reprovadas</div></td>` +
+                `<td style="width:33%;text-align:center;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:14px"><div style="font-size:1.6rem;font-weight:800;color:#dc2626">${rc.fail}</div><div style="font-size:0.73rem;color:#475569;margin-top:2px">Reprovadas</div></td>` +
                 `<td style="width:8px"></td>` +
-                `<td style="width:33%;text-align:center;background:#2a2413;border-radius:8px;padding:14px"><div style="font-size:1.6rem;font-weight:800;color:#fbbf24">${rc.warn}</div><div style="font-size:0.73rem;color:#94a3b8;margin-top:2px">Atenção</div></td>` +
+                `<td style="width:33%;text-align:center;background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:14px"><div style="font-size:1.6rem;font-weight:800;color:#ca8a04">${rc.warn}</div><div style="font-size:0.73rem;color:#475569;margin-top:2px">Atenção</div></td>` +
             `</tr></table>`;
             const list = mr.rules.map(r => {
                 const st = r.status || 'warn';
-                return `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#1e293b;border-radius:8px;margin-bottom:6px"><span style="font-size:1rem;flex-shrink:0">${ri[st] || '⚠️'}</span><div style="flex:1"><div style="font-weight:600;font-size:0.82rem;color:#e2e8f0">${esc(r.name || r.rule_name || '')}</div>${r.description || r.desc ? `<div style="font-size:0.74rem;color:#64748b;margin-top:2px">${esc(r.description || r.desc)}</div>` : ''}</div><span style="color:${rcol[st]};font-size:0.7rem;font-weight:700;text-transform:uppercase">${st === 'pass' ? 'APROVADA' : st === 'fail' ? 'REPROVADA' : 'ATENÇÃO'}</span></div>`;
+                return `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:6px"><span style="font-size:1rem;flex-shrink:0">${ri[st] || '⚠️'}</span><div style="flex:1"><div style="font-weight:600;font-size:0.82rem;color:#1e293b">${esc(r.name || r.rule_name || '')}</div>${r.description || r.desc ? `<div style="font-size:0.74rem;color:#64748b;margin-top:2px">${esc(r.description || r.desc)}</div>` : ''}</div><span style="color:${rcol[st]};font-size:0.7rem;font-weight:700;text-transform:uppercase">${st === 'pass' ? 'APROVADA' : st === 'fail' ? 'REPROVADA' : 'ATENÇÃO'}</span></div>`;
             }).join('');
             rulesHtml = sec('Regras de Qualidade', '📋', summary + list);
         }
 
         // ── Score header ──
         const scoreColor = g.color;
-        const scoreHtml = `<div style="background:linear-gradient(135deg,#1e293b 0%,#0f172a 100%);border:1px solid #334155;border-radius:12px;padding:24px;margin-bottom:28px;text-align:center">` +
+        const scoreHtml = `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:24px;margin-bottom:28px;text-align:center">` +
             `<div style="display:inline-block;width:100px;height:100px;border-radius:50%;border:5px solid ${scoreColor};line-height:90px;font-size:2.2rem;font-weight:900;color:${scoreColor};margin-bottom:12px">${mr.aiScore ?? '—'}</div>` +
             `<div style="font-size:1.1rem;font-weight:800;color:${scoreColor};margin-bottom:4px">${g.label}</div>` +
-            `<div style="font-size:0.82rem;color:#94a3b8;max-width:500px;margin:0 auto;line-height:1.5">${g.description}</div>` +
+            `<div style="font-size:0.82rem;color:#475569;max-width:500px;margin:0 auto;line-height:1.5">${g.description}</div>` +
         `</div>`;
 
         // ── Assemble ──
         const bodyHtml = `
             <div style="text-align:center;margin-bottom:8px">
-                <div style="font-size:1.8rem;font-weight:900;color:#818cf8;letter-spacing:-0.5px">Codexify</div>
+                <div style="font-size:1.8rem;font-weight:900;color:#6366f1;letter-spacing:-0.5px">Codexify</div>
                 <div style="font-size:0.7rem;color:#64748b;letter-spacing:3px;text-transform:uppercase;margin-top:2px">Relatório de Análise de Código</div>
             </div>
-            <div style="height:1px;background:linear-gradient(90deg,transparent,#818cf8,transparent);margin:16px 0 24px 0"></div>
-            <div style="background:#1e293b;border-radius:10px;padding:16px 20px;margin-bottom:24px">
-                <h2 style="font-size:1.1rem;margin:0 0 10px 0;color:#f1f5f9;font-weight:700">${esc(mr.title)}</h2>
-                <table style="border-collapse:collapse;font-size:0.8rem;color:#94a3b8"><tr>
-                    <td style="padding-right:20px">Branch: <strong style="color:#818cf8">${esc(mr.branch)} → ${esc(mr.targetBranch)}</strong></td>
-                    <td style="padding-right:20px">Autor: <strong style="color:#e2e8f0">${esc(mr.author?.name || '')}</strong></td>
-                    <td>Data: <strong style="color:#e2e8f0">${new Date().toLocaleDateString('pt-BR')}</strong></td>
+            <div style="height:1px;background:linear-gradient(90deg,transparent,#6366f1,transparent);margin:16px 0 24px 0"></div>
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px 20px;margin-bottom:24px">
+                <h2 style="font-size:1.1rem;margin:0 0 10px 0;color:#1e293b;font-weight:700">${esc(mr.title)}</h2>
+                <table style="border-collapse:collapse;font-size:0.8rem;color:#475569"><tr>
+                    <td style="padding-right:20px">Branch: <strong style="color:#6366f1">${esc(mr.branch)} → ${esc(mr.targetBranch)}</strong></td>
+                    <td style="padding-right:20px">Autor: <strong style="color:#1e293b">${esc(mr.author?.name || '')}</strong></td>
+                    <td>Data: <strong style="color:#1e293b">${new Date().toLocaleDateString('pt-BR')}</strong></td>
                 </tr></table>
             </div>
             ${scoreHtml}
@@ -2036,8 +2057,8 @@
             ${issuesHtml}
             ${diffHtml}
             ${rulesHtml}
-            <div style="text-align:center;padding-top:20px;margin-top:12px;border-top:1px solid #1e293b">
-                <div style="font-size:0.68rem;color:#475569">Gerado por <strong style="color:#818cf8">Codexify AI</strong> — ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}</div>
+            <div style="text-align:center;padding-top:20px;margin-top:12px;border-top:1px solid #e2e8f0">
+                <div style="font-size:0.68rem;color:#64748b">Gerado por <strong style="color:#6366f1">Codexify AI</strong> — ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}</div>
             </div>`;
 
         // ── Open popup with print-to-PDF (native browser, 100% reliable) ──
@@ -2051,18 +2072,18 @@
             '<title>Codexify — Relatório de Análise</title>',
             '<style>',
             '*{margin:0;padding:0;box-sizing:border-box}',
-            'body{background:#0f172a;color:#e2e8f0;font-family:Inter,Arial,Helvetica,sans-serif;padding:32px 28px;max-width:900px;margin:0 auto}',
+            'body{background:#ffffff;color:#1e293b;font-family:Inter,Arial,Helvetica,sans-serif;padding:32px 28px;max-width:900px;margin:0 auto}',
             '@media print{',
-            '  body{-webkit-print-color-adjustment:exact!important;print-color-adjust:exact!important;color-adjust:exact!important;padding:16px 12px}',
+            '  body{padding:16px 12px}',
             '  .no-print{display:none!important}',
             '  @page{margin:10mm 8mm;size:A4}',
             '}',
             '</style>',
             '</head><body>',
             safeBody,
-            '<div class="no-print" style="position:fixed;bottom:0;left:0;right:0;background:linear-gradient(135deg,#1e293b,#0f172a);border-top:1px solid #334155;text-align:center;padding:14px;z-index:9999">',
-            '<button onclick="window.print()" style="background:#818cf8;color:#fff;border:none;padding:10px 28px;border-radius:8px;font-weight:700;cursor:pointer;font-size:0.9rem;letter-spacing:0.3px">📥 Salvar como PDF</button>',
-            '<span style="display:block;margin-top:6px;font-size:0.72rem;color:#64748b">Na janela de impressão, selecione <strong style=color:#94a3b8>Salvar como PDF</strong> e clique em Salvar</span>',
+            '<div class="no-print" style="position:fixed;bottom:0;left:0;right:0;background:#f8fafc;border-top:1px solid #e2e8f0;text-align:center;padding:14px;z-index:9999">',
+            '<button onclick="window.print()" style="background:#6366f1;color:#fff;border:none;padding:10px 28px;border-radius:8px;font-weight:700;cursor:pointer;font-size:0.9rem;letter-spacing:0.3px">Salvar como PDF</button>',
+            '<span style="display:block;margin-top:6px;font-size:0.72rem;color:#64748b">Na janela de impressão, selecione <strong style=color:#475569>Salvar como PDF</strong> e clique em Salvar</span>',
             '</div>',
             '<div style="height:60px" class="no-print"></div>',
             '<script>setTimeout(function(){window.print()},800)<\/script>',

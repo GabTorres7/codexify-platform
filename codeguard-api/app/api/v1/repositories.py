@@ -358,7 +358,7 @@ async def analyze_repository(
     analysis_id = analysis_resp.data[0]["id"]
 
     background_tasks.add_task(_run_repo_analysis, repo, mr_id, analysis_id)
-    return {"message": "Análise do repositório iniciada", "analysis_id": analysis_id}
+    return {"message": "Análise do repositório iniciada", "analysis_id": analysis_id, "mr_id": mr_id}
 
 
 async def _run_repo_analysis(repo: dict, mr_id: str, analysis_id: str) -> None:

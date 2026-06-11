@@ -915,7 +915,7 @@
                             <span>Score min: ${r.min_score}</span>
                         </div>
                         ${r.avg_score != null ? `<div style="display:flex;align-items:center;gap:8px;width:100%"><div style="flex:1;background:var(--bg-tertiary);border-radius:4px;height:6px;overflow:hidden"><div style="background:${r.avg_score >= 65 ? 'var(--accent-success)' : r.avg_score >= 50 ? 'var(--accent-warning)' : 'var(--accent-danger)'};height:100%;width:${r.avg_score}%;border-radius:4px"></div></div><span style="font-size:0.75rem;font-weight:700;color:${r.avg_score >= 65 ? 'var(--accent-success)' : r.avg_score >= 50 ? 'var(--accent-warning)' : 'var(--accent-danger)'}">${r.avg_score}/100</span></div>` : ''}
-                        ${isAdmin() ? `<button class="btn btn-sm" style="width:100%;background:var(--accent-primary);color:white;border:none;padding:6px;border-radius:6px;font-size:0.78rem;font-weight:600;cursor:pointer" data-analyze-repo="${r.id}">🔍 Analisar Repositório</button>` : ''}
+                        ${isAdmin() ? `<button class="btn btn-sm" style="width:100%;background:rgba(129,140,248,0.12);color:var(--accent-primary);border:1px solid rgba(129,140,248,0.25);padding:7px;border-radius:8px;font-size:0.76rem;font-weight:600;cursor:pointer;transition:all 0.2s;letter-spacing:0.3px" onmouseover="this.style.background='rgba(129,140,248,0.22)'" onmouseout="this.style.background='rgba(129,140,248,0.12)'" data-analyze-repo="${r.id}">Analisar Repositorio</button>` : ''}
                     </div>
                 </div>
             `).join('')}</div>
@@ -939,8 +939,8 @@
             try { await api('DELETE', `/orgs/${ORG_ID}/repos/${b.dataset.del}`); toast('Removido!'); loadRepos(); } catch (e) { toast(e.message || 'Erro', 'error'); }
         }));
         c.querySelectorAll('[data-analyze-repo]').forEach(b => b.addEventListener('click', async () => {
-            b.disabled = true; b.textContent = '⏳ Analisando...';
-            try { await api('POST', `/orgs/${ORG_ID}/repos/${b.dataset.analyzeRepo}/analyze`); toast('Análise do repositório iniciada! Aguarde alguns segundos e recarregue.'); } catch (e) { toast(e.message || 'Erro ao analisar', 'error'); } b.disabled = false; b.textContent = '🔍 Analisar Repositório';
+            b.disabled = true; b.textContent = 'Analisando...';
+            try { await api('POST', `/orgs/${ORG_ID}/repos/${b.dataset.analyzeRepo}/analyze`); toast('Análise do repositório iniciada! Aguarde alguns segundos e recarregue.'); } catch (e) { toast(e.message || 'Erro ao analisar', 'error'); } b.disabled = false; b.textContent = 'Analisar Repositorio';
         }));
         refreshIcons();
     }

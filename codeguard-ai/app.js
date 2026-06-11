@@ -221,8 +221,36 @@
         actionOverlay.classList.add('active');
         document.body.style.overflow = 'hidden';
     }
-    function closeActionModal() { actionOverlay.classList.remove('active'); document.body.style.overflow = ''; }
-    function closeModal() { modalOverlay.classList.remove('active'); document.body.style.overflow = ''; currentMR = null; }
+    let closeActionModal = () => { actionOverlay.classList.remove('active'); document.body.style.overflow = ''; };
+
+    let _onModalClose = null;
+    function closeModal() {
+        modalOverlay.classList.remove('active'); document.body.style.overflow = ''; currentMR = null;
+        if (_onModalClose) { const cb = _onModalClose; _onModalClose = null; cb(); }
+    }
+
+    function confirmAction(title, message) {
+        return new Promise(resolve => {
+            let settled = false;
+            const baseClose = closeActionModal;
+            closeActionModal = () => {
+                baseClose();
+                closeActionModal = baseClose;
+                if (!settled) { settled = true; resolve(false); }
+            };
+            openActionModal(title, `
+                <div style="padding:8px 0">
+                    <p style="color:var(--text-secondary);font-size:0.95rem;line-height:1.6;margin-bottom:24px">${message}</p>
+                    <div class="form-actions">
+                        <button class="btn btn-secondary" id="confirmCancel">Cancelar</button>
+                        <button class="btn" id="confirmOk" style="background:var(--accent-danger);color:#fff;border:none">Confirmar</button>
+                    </div>
+                </div>
+            `);
+            $('confirmCancel').addEventListener('click', () => closeActionModal());
+            $('confirmOk').addEventListener('click', () => { settled = true; closeActionModal(); resolve(true); });
+        });
+    }
 
     function toast(msg, type) {
         const t = document.createElement('div');
@@ -935,7 +963,8 @@
             b.disabled = true; try { await api('POST', `/orgs/${ORG_ID}/repos/${b.dataset.sync}/sync`); toast('Sync iniciada!'); } catch (e) { toast(e.message || 'Erro', 'error'); } b.disabled = false;
         }));
         c.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', async () => {
-            if (!confirm('Remover este repositório e todos os seus dados?')) return;
+            const ok = await confirmAction('Remover Repositório', 'Tem certeza que deseja remover este repositório e todos os seus dados? Essa ação não pode ser desfeita.');
+            if (!ok) return;
             try { await api('DELETE', `/orgs/${ORG_ID}/repos/${b.dataset.del}`); toast('Removido!'); loadRepos(); } catch (e) { toast(e.message || 'Erro', 'error'); }
         }));
         c.querySelectorAll('[data-analyze-repo]').forEach(b => b.addEventListener('click', async () => {
@@ -955,6 +984,7 @@
                                 clearInterval(poll);
                                 b.disabled = false; b.textContent = 'Analisar Repositorio';
                                 openMRDetail(mrId, repoId);
+                                _onModalClose = () => { if (currentPage === 'repositories') loadRepos(); };
                             }
                         } catch (_) {
                             if (tries >= 30) { clearInterval(poll); b.disabled = false; b.textContent = 'Analisar Repositorio'; }
@@ -1495,7 +1525,7 @@
     }
 
     async function deleteMember(userId, userName) {
-        const confirmed = confirm(`Tem certeza que deseja remover "${userName}" da organização?\n\nEle perdera acesso ao sistema.`);
+        const confirmed = await confirmAction('Remover Membro', `Tem certeza que deseja remover "${esc(userName)}" da organização? Ele perderá acesso ao sistema.`);
         if (!confirmed) return;
         try {
             await ensureAuth();
@@ -1867,6 +1897,20 @@
                 try {
                     await api('POST', `/orgs/${ORG_ID}/repos/${mr._repo_id}/mrs/${mr.id}/analyze`);
                     toast('Análise iniciada! Aguarde...'); btn.textContent = 'Análise em andamento...';
+                    const repoId = mr._repo_id, mrId = mr.id;
+                    let tries = 0;
+                    const poll = setInterval(async () => {
+                        tries++;
+                        try {
+                            const updated = await api('GET', `/orgs/${ORG_ID}/repos/${repoId}/mrs/${mrId}`);
+                            if (updated.status === 'approved' || updated.status === 'issues' || tries >= 30) {
+                                clearInterval(poll);
+                                openMRDetail(mrId, repoId);
+                            }
+                        } catch (_) {
+                            if (tries >= 30) { clearInterval(poll); btn.disabled = false; btn.textContent = 'Disparar Análise IA'; toast('Tempo esgotado. Verifique manualmente.', 'error'); }
+                        }
+                    }, 3000);
                 } catch (e) { toast(e.message || 'Erro ao iniciar análise', 'error'); btn.disabled = false; btn.textContent = 'Disparar Análise IA'; }
             });
         }
@@ -2094,11 +2138,25 @@
     }
 
     async function reanalyzeCurrentMR(mr) {
-        if (!mr._repoId || !mr.id) { toast('Não é possível re-analisar este MR', 'error'); return; }
+        if (!mr._repo_id || !mr.id) { toast('Não é possível re-analisar este MR', 'error'); return; }
         try {
             await ensureAuth();
-            await api('POST', `/orgs/${ORG_ID}/repos/${mr._repoId}/mrs/${mr.id}/analyze`);
-            toast('Re-análise iniciada!');
+            await api('POST', `/orgs/${ORG_ID}/repos/${mr._repo_id}/mrs/${mr.id}/analyze`);
+            toast('Re-análise iniciada! Aguarde...');
+            const repoId = mr._repo_id, mrId = mr.id;
+            let tries = 0;
+            const poll = setInterval(async () => {
+                tries++;
+                try {
+                    const updated = await api('GET', `/orgs/${ORG_ID}/repos/${repoId}/mrs/${mrId}`);
+                    if (updated.status === 'approved' || updated.status === 'issues' || tries >= 30) {
+                        clearInterval(poll);
+                        openMRDetail(mrId, repoId);
+                    }
+                } catch (_) {
+                    if (tries >= 30) { clearInterval(poll); toast('Tempo esgotado. Verifique manualmente.', 'error'); }
+                }
+            }, 3000);
         } catch (e) { toast(e.message || 'Erro ao re-analisar', 'error'); }
     }
 
@@ -2466,7 +2524,7 @@
     }
 
     async function deleteRule(ruleId, ruleName) {
-        const confirmed = confirm(`Tem certeza que deseja excluir a regra "${ruleName}"?\n\nEssa acao nao pode ser desfeita.`);
+        const confirmed = await confirmAction('Excluir Regra', `Tem certeza que deseja excluir a regra "${esc(ruleName)}"? Essa ação não pode ser desfeita.`);
         if (!confirmed) return;
 
         try {

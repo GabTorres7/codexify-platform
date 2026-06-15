@@ -2674,8 +2674,10 @@
     // ================================================================
     function renderUploadPage() {
         pageContent.innerHTML = `
-            <h1 class="page-title">Análise Rápida</h1>
-            <p class="page-subtitle">Envie um arquivo .patch, .zip ou cole o diff diretamente — sem conectar GitHub/GitLab</p>
+            <div id="upPageHeader">
+                <h1 class="page-title">Análise Rápida</h1>
+                <p class="page-subtitle">Envie um arquivo .patch, .zip ou cole o diff diretamente — sem conectar GitHub/GitLab</p>
+            </div>
 
             <div class="card stagger-in" id="upFormCard" style="animation-delay:0.1s">
                 <div class="card-header"><span class="card-title">Upload de Código</span></div>
@@ -2699,32 +2701,31 @@
                 </div>
             </div>
 
-            <!-- SSE Progress -->
-            <div id="upProgress" style="display:none;margin-top:16px">
-                <div class="card">
-                    <div class="card-header"><span class="card-title">Progresso da Análise</span></div>
-                    <div class="card-body" style="padding:24px;display:flex;flex-direction:column;align-items:center">
-                        <div class="circle-progress" id="upCircle">
-                            <svg viewBox="0 0 180 180"><circle class="track" cx="90" cy="90" r="80"/><circle class="fill" id="upCircleFill" cx="90" cy="90" r="80"/></svg>
-                            <div class="center-text"><div class="pct" id="upPct">5%</div><div class="label" id="upStepLabel">Aguardando...</div></div>
-                        </div>
-                        <div class="progress-steps" id="upSteps" style="margin-top:20px">
-                            <div class="progress-step active" id="upStep1"><div class="progress-step-icon">${icon('clock',14)}</div><span>Fila</span></div>
-                            <div class="progress-step-line"></div>
-                            <div class="progress-step" id="upStep2"><div class="progress-step-icon">${icon('code',14)}</div><span>Preparando</span></div>
-                            <div class="progress-step-line"></div>
-                            <div class="progress-step" id="upStep3"><div class="progress-step-icon">${icon('brain',14)}</div><span>IA Analisando</span></div>
-                            <div class="progress-step-line"></div>
-                            <div class="progress-step" id="upStep4"><div class="progress-step-icon">${icon('save',14)}</div><span>Salvando</span></div>
-                            <div class="progress-step-line"></div>
-                            <div class="progress-step" id="upStep5"><div class="progress-step-icon">${icon('check-circle',14)}</div><span>Pronto</span></div>
+            <!-- SSE Progress (fullscreen overlay) -->
+            <div id="upProgress" style="display:none">
+                <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh">
+                    <div class="card" style="width:100%;max-width:600px">
+                        <div class="card-header"><span class="card-title">Progresso da Análise</span></div>
+                        <div class="card-body" style="padding:40px 24px;display:flex;flex-direction:column;align-items:center">
+                            <div class="circle-progress" id="upCircle">
+                                <svg viewBox="0 0 180 180"><circle class="track" cx="90" cy="90" r="80"/><circle class="fill" id="upCircleFill" cx="90" cy="90" r="80"/></svg>
+                                <div class="center-text"><div class="pct" id="upPct">5%</div><div class="label" id="upStepLabel">Aguardando...</div></div>
+                            </div>
+                            <div class="progress-steps" id="upSteps" style="margin-top:24px">
+                                <div class="progress-step active" id="upStep1"><div class="progress-step-icon">${icon('clock',14)}</div><span>Fila</span></div>
+                                <div class="progress-step-line"></div>
+                                <div class="progress-step" id="upStep2"><div class="progress-step-icon">${icon('code',14)}</div><span>Preparando</span></div>
+                                <div class="progress-step-line"></div>
+                                <div class="progress-step" id="upStep3"><div class="progress-step-icon">${icon('brain',14)}</div><span>IA Analisando</span></div>
+                                <div class="progress-step-line"></div>
+                                <div class="progress-step" id="upStep4"><div class="progress-step-icon">${icon('save',14)}</div><span>Salvando</span></div>
+                                <div class="progress-step-line"></div>
+                                <div class="progress-step" id="upStep5"><div class="progress-step-icon">${icon('check-circle',14)}</div><span>Pronto</span></div>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
-
-            <!-- Result -->
-            <div id="upResult" style="margin-top:16px"></div>`;
+            </div>`;
 
         $('upSubmit').addEventListener('click', handleUploadSubmit);
 
@@ -2774,6 +2775,7 @@
             if (!r.ok) throw data;
 
             toast('Análise iniciada!');
+            $('upPageHeader').style.display = 'none';
             $('upFormCard').style.display = 'none';
             $('upProgress').style.display = 'block';
 
@@ -2854,8 +2856,10 @@
                         await openMRDetail(mrId, repoId);
                     }
 
+                    const hd = $('upPageHeader');
                     const fc = $('upFormCard');
                     const pg = $('upProgress');
+                    if (hd) hd.style.display = '';
                     if (fc) fc.style.display = '';
                     if (pg) pg.style.display = 'none';
                 }, 1000);

@@ -114,12 +114,12 @@
         const authed = await ensureAuth();
         if (authed && ORG_ID) {
             try {
-                const repos = await api('GET', `/orgs/${ORG_ID}/repos`);
-                cachedRepos = repos || [];
+                const reposResp = await api('GET', `/orgs/${ORG_ID}/repos`);
+                cachedRepos = Array.isArray(reposResp) ? reposResp : (reposResp.items || []);
                 const results = await Promise.allSettled(
                     cachedRepos.map(repo =>
                         api('GET', `/orgs/${ORG_ID}/repos/${repo.id}/mrs?limit=100`).then(resp => {
-                            const items = resp.items || resp || [];
+                            const items = Array.isArray(resp) ? resp : (resp.items || []);
                             items.forEach(mr => { mr._repo_id = repo.id; mr._repo_name = repo.full_name; });
                             return items;
                         })
@@ -127,7 +127,7 @@
                 );
                 const allMrs = results.filter(r => r.status === 'fulfilled').flatMap(r => r.value);
                 if (allMrs.length) { cachedMRs = allMrs; useMockData = false; return allMrs; }
-            } catch (_) {}
+            } catch (e) { console.warn('loadAllMRs error:', e); }
         }
         useMockData = true;
         cachedMRs = getMockMRs();
@@ -529,19 +529,26 @@
         }
 
         // MR Table with filters (já carregado em paralelo)
-        if (mrsRes.status === 'fulfilled' && mrsRes.value && mrsRes.value.length) {
-            dashMRs = mrsRes.value.map(normalizeMR);
-        } else {
-            dashMRs = typeof MERGE_REQUESTS !== 'undefined' ? MERGE_REQUESTS : [];
+        try {
+            if (mrsRes.status === 'fulfilled' && mrsRes.value && mrsRes.value.length) {
+                dashMRs = mrsRes.value.map(normalizeMR);
+            } else {
+                dashMRs = [];
+            }
+        } catch (e) {
+            console.warn('Erro ao normalizar MRs:', e);
+            dashMRs = [];
         }
 
         // Populate author filter
-        const dashAuthors = [...new Set(dashMRs.map(m => m.author.name))].sort();
-        const dashAuthorSel = $('dashFilterAuthor');
-        dashAuthors.forEach(a => { const o = document.createElement('option'); o.value = a; o.textContent = a; dashAuthorSel.appendChild(o); });
+        try {
+            const dashAuthors = [...new Set(dashMRs.map(m => m.author.name))].sort();
+            const dashAuthorSel = $('dashFilterAuthor');
+            dashAuthors.forEach(a => { const o = document.createElement('option'); o.value = a; o.textContent = a; dashAuthorSel.appendChild(o); });
+        } catch(_) {}
 
         dashPage = 1;
-        renderDashMRs();
+        try { renderDashMRs(); } catch (e) { console.warn('Erro ao renderizar MRs:', e); $('mrTableContainer').innerHTML = '<div class="empty-state"><h3>Erro ao carregar MRs</h3></div>'; }
 
         refreshIcons();
     }

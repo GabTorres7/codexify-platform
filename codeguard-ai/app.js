@@ -2448,16 +2448,13 @@
 
         try {
             await ensureAuth();
-            _rulesCache = await api('GET', `/orgs/${ORG_ID}/rules`);
+            const resp = await api('GET', `/orgs/${ORG_ID}/rules`);
+            _rulesCache = Array.isArray(resp) ? resp : (resp.items || []);
             renderRulesGrid(_rulesCache);
-        } catch (_) {
-            if (typeof CONFIGURABLE_RULES !== 'undefined') {
-                _rulesCache = CONFIGURABLE_RULES.map(r => ({
-                    id: r.id, name: r.name, description: r.desc,
-                    severity: r.severity, is_active: r.active, is_builtin: false,
-                }));
-                renderRulesGrid(_rulesCache);
-            }
+        } catch (e) {
+            console.warn('Erro ao carregar regras:', e);
+            _rulesCache = [];
+            renderRulesGrid(_rulesCache);
         }
     }
 
@@ -2700,8 +2697,12 @@
             <div id="upProgress" style="display:none;margin-top:16px">
                 <div class="card">
                     <div class="card-header"><span class="card-title">Progresso da Análise</span></div>
-                    <div class="card-body" style="padding:24px">
-                        <div class="progress-steps" id="upSteps">
+                    <div class="card-body" style="padding:24px;display:flex;flex-direction:column;align-items:center">
+                        <div class="circle-progress" id="upCircle">
+                            <svg viewBox="0 0 180 180"><circle class="track" cx="90" cy="90" r="80"/><circle class="fill" id="upCircleFill" cx="90" cy="90" r="80"/></svg>
+                            <div class="center-text"><div class="pct" id="upPct">5%</div><div class="label" id="upStepLabel">Aguardando...</div></div>
+                        </div>
+                        <div class="progress-steps" id="upSteps" style="margin-top:20px">
                             <div class="progress-step active" id="upStep1"><div class="progress-step-icon">${icon('clock',14)}</div><span>Fila</span></div>
                             <div class="progress-step-line"></div>
                             <div class="progress-step" id="upStep2"><div class="progress-step-icon">${icon('code',14)}</div><span>Preparando</span></div>
@@ -2711,11 +2712,6 @@
                             <div class="progress-step" id="upStep4"><div class="progress-step-icon">${icon('save',14)}</div><span>Salvando</span></div>
                             <div class="progress-step-line"></div>
                             <div class="progress-step" id="upStep5"><div class="progress-step-icon">${icon('check-circle',14)}</div><span>Pronto</span></div>
-                        </div>
-                        <div class="up-bar"><div class="up-bar-fill" id="upBarFill" style="width:5%"></div></div>
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">
-                            <div id="upStepLabel" style="color:var(--text-secondary);font-size:0.9rem">Aguardando na fila...</div>
-                            <div id="upPct" style="color:var(--accent-primary);font-weight:600;font-size:0.95rem">5%</div>
                         </div>
                     </div>
                 </div>
@@ -2808,9 +2804,9 @@
         }, 4000);
 
         function _updateProgressBar(val) {
-            const fill = $('upBarFill');
+            const fill = $('upCircleFill');
             const pctEl = $('upPct');
-            if (fill) fill.style.width = val + '%';
+            if (fill) fill.style.strokeDashoffset = 502 - (502 * val / 100);
             if (pctEl) pctEl.textContent = val + '%';
             if (val >= 5) _activateStep('upStep1');
             if (val >= 20) _activateStep('upStep2');
@@ -2827,7 +2823,7 @@
         evtSource.onmessage = (event) => {
             const data = JSON.parse(event.data);
             const label = $('upStepLabel');
-            const fill = $('upBarFill');
+            const fill = $('upCircleFill');
 
             if (data.progress_label && label) label.textContent = data.progress_label;
 
@@ -2837,8 +2833,8 @@
                 clearInterval(labelInterval);
                 evtSource.close();
                 _updateProgressBar(100);
-                if (fill) fill.style.background = 'var(--accent-success)';
-                if (label) label.textContent = 'Análise concluída!';
+                if (fill) fill.classList.add('done');
+                if (label) label.textContent = 'Concluída!';
 
                 setTimeout(() => {
                     $('upSubmit').disabled = false;
@@ -2861,8 +2857,8 @@
                 clearInterval(countInterval);
                 clearInterval(labelInterval);
                 evtSource.close();
-                if (fill) fill.style.background = 'var(--accent-danger)';
-                if (label) label.textContent = 'Erro: ' + (data.error_message || 'Falha na análise');
+                if (fill) fill.style.stroke = 'var(--accent-danger)';
+                if (label) label.textContent = 'Erro';
                 $('upSubmit').disabled = false;
                 $('upSubmit').textContent = 'Analisar com IA';
                 toast('Análise falhou', 'error');

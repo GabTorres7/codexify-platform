@@ -11,16 +11,27 @@ Seu JSON DEVE seguir exatamente o schema descrito em cada mensagem do usuario.
 Seja detalhado, preciso e pratico. Ao apontar problemas, sempre sugira correcoes concretas."""
 
 
+DEFAULT_RULES = [
+    {"name": "Segurança de Dados", "severity": "critical", "description": "Verificar se há exposição de dados sensíveis, secrets hardcoded, SQL injection ou XSS"},
+    {"name": "Tratamento de Erros", "severity": "high", "description": "Verificar se exceções são tratadas corretamente, sem swallow silencioso ou exposição de stack traces"},
+    {"name": "Validação de Input", "severity": "high", "description": "Verificar se inputs do usuário são validados e sanitizados antes do uso"},
+    {"name": "Boas Práticas", "severity": "medium", "description": "Verificar aderência a padrões do projeto, código duplicado, complexidade ciclomática e princípios SOLID"},
+    {"name": "Performance", "severity": "medium", "description": "Verificar queries N+1, loops desnecessários, falta de paginação e operações bloqueantes"},
+    {"name": "Legibilidade", "severity": "low", "description": "Verificar nomes descritivos, funções curtas, organização lógica e comentários úteis"},
+]
+
+
 def build_analysis_prompt(
     mr_title: str,
     mr_description: str,
     files_diff: list[dict],   # [{file, diff_text}]
     rules: list[dict],        # [{name, description, severity, prompt_hint}]
 ) -> str:
+    effective_rules = rules if rules else DEFAULT_RULES
     rules_block = "\n".join(
         f"- [{r['severity'].upper()}] {r['name']}: {r.get('description', '')}. "
         f"{'Dica: ' + r['prompt_hint'] if r.get('prompt_hint') else ''}"
-        for r in rules
+        for r in effective_rules
     )
 
     diffs_block = ""

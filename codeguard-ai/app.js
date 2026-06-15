@@ -2279,7 +2279,13 @@
 
     function renderRulesTab() {
         const mr = currentMR;
-        if (!mr.rules || !mr.rules.length) { modalBody.innerHTML = '<div class="empty-state"><h3>Regras pendentes</h3><p>As regras serao avaliadas apos a análise da IA</p></div>'; return; }
+        if (!mr.rules || !mr.rules.length) {
+            const done = mr.status === 'approved' || mr.status === 'needs_review' || mr.status === 'rejected' || mr.aiScore != null;
+            modalBody.innerHTML = done
+                ? '<div class="empty-state"><h3>Nenhuma regra avaliada</h3><p>Re-analise este MR para gerar a avaliação de regras</p></div>'
+                : '<div class="empty-state"><h3>Regras pendentes</h3><p>As regras serão avaliadas após a análise da IA</p></div>';
+            return;
+        }
         const rules = mr.rules.map(r => ({
             name: r.name || r.rule_name || '',
             status: r.status || 'warn',

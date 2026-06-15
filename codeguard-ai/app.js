@@ -221,7 +221,11 @@
         actionOverlay.classList.add('active');
         document.body.style.overflow = 'hidden';
     }
-    let closeActionModal = () => { actionOverlay.classList.remove('active'); document.body.style.overflow = ''; };
+    let _onActionModalClose = null;
+    function closeActionModal() {
+        actionOverlay.classList.remove('active'); document.body.style.overflow = '';
+        if (_onActionModalClose) { const cb = _onActionModalClose; _onActionModalClose = null; cb(); }
+    }
 
     let _onModalClose = null;
     function closeModal() {
@@ -232,12 +236,7 @@
     function confirmAction(title, message) {
         return new Promise(resolve => {
             let settled = false;
-            const baseClose = closeActionModal;
-            closeActionModal = () => {
-                baseClose();
-                closeActionModal = baseClose;
-                if (!settled) { settled = true; resolve(false); }
-            };
+            _onActionModalClose = () => { if (!settled) { settled = true; resolve(false); } };
             openActionModal(title, `
                 <div style="padding:8px 0">
                     <p style="color:var(--text-secondary);font-size:0.95rem;line-height:1.6;margin-bottom:24px">${message}</p>
@@ -248,7 +247,7 @@
                 </div>
             `);
             $('confirmCancel').addEventListener('click', () => closeActionModal());
-            $('confirmOk').addEventListener('click', () => { settled = true; closeActionModal(); resolve(true); });
+            $('confirmOk').addEventListener('click', () => { settled = true; _onActionModalClose = null; closeActionModal(); resolve(true); });
         });
     }
 

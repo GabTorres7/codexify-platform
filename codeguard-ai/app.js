@@ -2677,7 +2677,7 @@
             <h1 class="page-title">Análise Rápida</h1>
             <p class="page-subtitle">Envie um arquivo .patch, .zip ou cole o diff diretamente — sem conectar GitHub/GitLab</p>
 
-            <div class="card stagger-in" style="animation-delay:0.1s">
+            <div class="card stagger-in" id="upFormCard" style="animation-delay:0.1s">
                 <div class="card-header"><span class="card-title">Upload de Código</span></div>
                 <div class="card-body" style="padding:24px">
                     ${formRow('Título', 'Descreva brevemente o que foi alterado', '<input class="input" id="upTitle" placeholder="Ex: Refatorar módulo de pagamentos">')}
@@ -2774,10 +2774,10 @@
             if (!r.ok) throw data;
 
             toast('Análise iniciada!');
+            $('upFormCard').style.display = 'none';
             $('upProgress').style.display = 'block';
 
-            // Start SSE to track progress
-            trackAnalysisSSE(data.analysis_id);
+            trackAnalysisSSE(data.analysis_id, data.mr_id);
 
         } catch (e) {
             toast(e.message || e.detail || 'Erro ao enviar', 'error');
@@ -2785,7 +2785,7 @@
         }
     }
 
-    function trackAnalysisSSE(analysisId) {
+    function trackAnalysisSSE(analysisId, mrId) {
         const evtSource = new EventSource(API + `/analyses/${analysisId}/stream`);
         let pct = 0;
         let done = false;
@@ -2842,21 +2842,22 @@
                 if (fill) fill.classList.add('done');
                 if (label) label.textContent = 'Concluída!';
 
-                setTimeout(() => {
+                setTimeout(async () => {
                     $('upSubmit').disabled = false;
                     $('upSubmit').textContent = 'Analisar com IA';
                     toast('Análise concluída! Score: ' + data.ai_score);
 
-                    const g = AnalysisEngine.getScoreGrade(data.ai_score);
-                    $('upResult').innerHTML = `
-                        <div class="card stagger-in">
-                            <div class="card-header"><span class="card-title">Resultado</span><span class="card-badge" style="background:${g.color}20;color:${g.color}">${g.label}</span></div>
-                            <div class="card-body" style="padding:24px;text-align:center">
-                                <div class="score-circle" style="--score-color:${g.color};--score-pct:${data.ai_score};color:${g.color};margin:0 auto 16px">${data.ai_score}</div>
-                                <p style="color:var(--text-secondary)">${g.description}</p>
-                                <button class="btn btn-primary" style="margin-top:16px" onclick="document.querySelector('[data-page=merge-requests]').click()">Ver Detalhes</button>
-                            </div>
-                        </div>`;
+                    if (mrId) {
+                        await loadAllMRs();
+                        const found = cachedMRs.find(m => String(m.id) === String(mrId));
+                        const repoId = found ? (found._repo_id || found.repo_id) : null;
+                        await openMRDetail(mrId, repoId);
+                    }
+
+                    const fc = $('upFormCard');
+                    const pg = $('upProgress');
+                    if (fc) fc.style.display = '';
+                    if (pg) pg.style.display = 'none';
                 }, 1000);
             } else if (data.status === 'failed') {
                 done = true;

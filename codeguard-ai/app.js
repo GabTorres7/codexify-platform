@@ -1841,6 +1841,63 @@
         }));
     }
 
+    // ── Modal Analysis Progress Helper ─────────────────────
+    function showModalAnalysisProgress() {
+        const labels = ['Preparando análise...', 'Lendo arquivo...', 'Carregando regras...', 'Enviando para IA...', 'IA analisando código...', 'Processando resultados...', 'Finalizando...'];
+        modalBody.innerHTML = `
+            <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:340px">
+                <div class="circle-progress" id="mrCircle">
+                    <svg viewBox="0 0 180 180"><circle class="track" cx="90" cy="90" r="80"/><circle class="fill" id="mrCircleFill" cx="90" cy="90" r="80"/></svg>
+                    <div class="center-text"><div class="pct" id="mrPct">5%</div><div class="label" id="mrStepLabel">Iniciando...</div></div>
+                </div>
+                <div class="progress-steps" style="margin-top:24px">
+                    <div class="progress-step active" id="mrStep1"><div class="progress-step-icon">${icon('clock',14)}</div><span>Fila</span></div>
+                    <div class="progress-step-line"></div>
+                    <div class="progress-step" id="mrStep2"><div class="progress-step-icon">${icon('code',14)}</div><span>Preparando</span></div>
+                    <div class="progress-step-line"></div>
+                    <div class="progress-step" id="mrStep3"><div class="progress-step-icon">${icon('brain',14)}</div><span>IA Analisando</span></div>
+                    <div class="progress-step-line"></div>
+                    <div class="progress-step" id="mrStep4"><div class="progress-step-icon">${icon('save',14)}</div><span>Salvando</span></div>
+                    <div class="progress-step-line"></div>
+                    <div class="progress-step" id="mrStep5"><div class="progress-step-icon">${icon('check-circle',14)}</div><span>Pronto</span></div>
+                </div>
+            </div>`;
+        refreshIcons();
+        let pct = 5, labelIdx = 0, done = false;
+        const countInterval = setInterval(() => {
+            if (done) return;
+            if (pct < 30) pct += 2;
+            else if (pct < 60) pct += 1;
+            else if (pct < 80) pct += 0.5;
+            else if (pct < 90) pct += 0.2;
+            const v = Math.round(pct);
+            const fill = $('mrCircleFill'), pctEl = $('mrPct');
+            if (fill) fill.style.strokeDashoffset = 502 - (502 * v / 100);
+            if (pctEl) pctEl.textContent = v + '%';
+            if (v >= 5) { const s = $('mrStep1'); if (s) s.classList.add('active'); }
+            if (v >= 20) { const s = $('mrStep2'); if (s) s.classList.add('active'); }
+            if (v >= 45) { const s = $('mrStep3'); if (s) s.classList.add('active'); }
+            if (v >= 85) { const s = $('mrStep4'); if (s) s.classList.add('active'); }
+        }, 150);
+        const labelInterval = setInterval(() => {
+            if (done) return;
+            if (labelIdx < labels.length - 1) labelIdx++;
+            const el = $('mrStepLabel');
+            if (el) el.textContent = labels[labelIdx];
+        }, 4000);
+        return {
+            complete() {
+                done = true; clearInterval(countInterval); clearInterval(labelInterval);
+                const fill = $('mrCircleFill'), pctEl = $('mrPct'), lbl = $('mrStepLabel');
+                if (fill) { fill.style.strokeDashoffset = 0; fill.classList.add('done'); }
+                if (pctEl) pctEl.textContent = '100%';
+                if (lbl) lbl.textContent = 'Concluída!';
+                const s5 = $('mrStep5'); if (s5) s5.classList.add('active');
+            },
+            stop() { done = true; clearInterval(countInterval); clearInterval(labelInterval); }
+        };
+    }
+
     // ── MR Detail Modal ──────────────────────────────────────
     async function openMRDetail(mrId, repoId) {
         currentTab = 'overview';
@@ -1899,10 +1956,10 @@
 
         if (mr._repo_id && $('btnTriggerAnalysis')) {
             $('btnTriggerAnalysis').addEventListener('click', async () => {
-                const btn = $('btnTriggerAnalysis'); btn.disabled = true; btn.textContent = 'Iniciando...';
                 try {
                     await api('POST', `/orgs/${ORG_ID}/repos/${mr._repo_id}/mrs/${mr.id}/analyze`);
-                    toast('Análise iniciada! Aguarde...'); btn.textContent = 'Análise em andamento...';
+                    toast('Análise iniciada!');
+                    const progress = showModalAnalysisProgress();
                     const repoId = mr._repo_id, mrId = mr.id;
                     let tries = 0;
                     const poll = setInterval(async () => {
@@ -1911,13 +1968,14 @@
                             const updated = await api('GET', `/orgs/${ORG_ID}/repos/${repoId}/mrs/${mrId}`);
                             if (updated.status === 'approved' || updated.status === 'issues' || tries >= 30) {
                                 clearInterval(poll);
-                                openMRDetail(mrId, repoId);
+                                progress.complete();
+                                setTimeout(() => openMRDetail(mrId, repoId), 1000);
                             }
                         } catch (_) {
-                            if (tries >= 30) { clearInterval(poll); btn.disabled = false; btn.textContent = 'Disparar Análise IA'; toast('Tempo esgotado. Verifique manualmente.', 'error'); }
+                            if (tries >= 30) { clearInterval(poll); progress.stop(); toast('Tempo esgotado. Verifique manualmente.', 'error'); renderOverviewTab(); }
                         }
                     }, 3000);
-                } catch (e) { toast(e.message || 'Erro ao iniciar análise', 'error'); btn.disabled = false; btn.textContent = 'Disparar Análise IA'; }
+                } catch (e) { toast(e.message || 'Erro ao iniciar análise', 'error'); }
             });
         }
     }
@@ -2148,7 +2206,8 @@
         try {
             await ensureAuth();
             await api('POST', `/orgs/${ORG_ID}/repos/${mr._repo_id}/mrs/${mr.id}/analyze`);
-            toast('Re-análise iniciada! Aguarde...');
+            toast('Re-análise iniciada!');
+            const progress = showModalAnalysisProgress();
             const repoId = mr._repo_id, mrId = mr.id;
             let tries = 0;
             const poll = setInterval(async () => {
@@ -2157,10 +2216,11 @@
                     const updated = await api('GET', `/orgs/${ORG_ID}/repos/${repoId}/mrs/${mrId}`);
                     if (updated.status === 'approved' || updated.status === 'issues' || tries >= 30) {
                         clearInterval(poll);
-                        openMRDetail(mrId, repoId);
+                        progress.complete();
+                        setTimeout(() => openMRDetail(mrId, repoId), 1000);
                     }
                 } catch (_) {
-                    if (tries >= 30) { clearInterval(poll); toast('Tempo esgotado. Verifique manualmente.', 'error'); }
+                    if (tries >= 30) { clearInterval(poll); progress.stop(); toast('Tempo esgotado. Verifique manualmente.', 'error'); }
                 }
             }, 3000);
         } catch (e) { toast(e.message || 'Erro ao re-analisar', 'error'); }
@@ -2781,6 +2841,7 @@
             if (!r.ok) throw data;
 
             toast('Análise iniciada!');
+            $('app').classList.add('analysis-fullscreen');
             $('upPageHeader').style.display = 'none';
             $('upFormCard').style.display = 'none';
             $('upProgress').style.display = 'block';
@@ -2862,6 +2923,7 @@
                         await openMRDetail(mrId, repoId);
                     }
 
+                    $('app').classList.remove('analysis-fullscreen');
                     const hd = $('upPageHeader');
                     const fc = $('upFormCard');
                     const pg = $('upProgress');
@@ -2874,6 +2936,7 @@
                 clearInterval(countInterval);
                 clearInterval(labelInterval);
                 evtSource.close();
+                $('app').classList.remove('analysis-fullscreen');
                 if (fill) fill.style.stroke = 'var(--accent-danger)';
                 if (label) label.textContent = 'Erro';
                 $('upSubmit').disabled = false;
@@ -2881,7 +2944,7 @@
                 toast('Análise falhou', 'error');
             }
         };
-        evtSource.onerror = () => { done = true; clearInterval(countInterval); clearInterval(labelInterval); evtSource.close(); };
+        evtSource.onerror = () => { done = true; clearInterval(countInterval); clearInterval(labelInterval); evtSource.close(); $('app').classList.remove('analysis-fullscreen'); };
     }
 
     // ================================================================

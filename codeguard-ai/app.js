@@ -975,28 +975,87 @@
         }));
         c.querySelectorAll('[data-analyze-repo]').forEach(b => b.addEventListener('click', async () => {
             const repoId = b.dataset.analyzeRepo;
+            const repoName = b.closest('.repo-card,.card')?.querySelector('.card-title,.repo-name')?.textContent || 'Repositório';
             b.disabled = true; b.textContent = 'Analisando...';
             try {
                 const res = await api('POST', `/orgs/${ORG_ID}/repos/${repoId}/analyze`);
                 const mrId = res.mr_id;
-                toast('Análise iniciada! Aguarde...');
-                if (mrId) {
-                    let tries = 0;
-                    const poll = setInterval(async () => {
-                        tries++;
-                        try {
-                            const mr = await api('GET', `/orgs/${ORG_ID}/repos/${repoId}/mrs/${mrId}`);
-                            if (mr.status === 'approved' || mr.status === 'issues' || tries >= 30) {
-                                clearInterval(poll);
+                if (!mrId) { b.disabled = false; b.textContent = 'Analisar Repositorio'; return; }
+                toast('Análise iniciada!');
+
+                const overlay = document.createElement('div');
+                overlay.className = 'bulk-overlay';
+                overlay.id = 'repoAnalysisOverlay';
+                const labels = ['Preparando análise...', 'Buscando arquivos...', 'Carregando regras...', 'Enviando para IA...', 'IA analisando código...', 'Processando resultados...', 'Finalizando...'];
+                overlay.innerHTML = `
+                    <div class="circle-progress">
+                        <svg viewBox="0 0 180 180"><circle class="track" cx="90" cy="90" r="80"/><circle class="fill" id="repoCircFill" cx="90" cy="90" r="80"/></svg>
+                        <div class="center-text"><div class="pct" id="repoCircPct">5%</div><div class="label" id="repoCircLabel">Iniciando...</div></div>
+                    </div>
+                    <div style="color:var(--text-primary);font-size:1.1rem;font-weight:600;margin-top:8px">${esc(repoName)}</div>
+                    <div class="progress-steps" style="margin-top:24px">
+                        <div class="progress-step active" id="repoStep1"><div class="progress-step-icon">${icon('clock',14)}</div><span>Fila</span></div>
+                        <div class="progress-step-line"></div>
+                        <div class="progress-step" id="repoStep2"><div class="progress-step-icon">${icon('code',14)}</div><span>Preparando</span></div>
+                        <div class="progress-step-line"></div>
+                        <div class="progress-step" id="repoStep3"><div class="progress-step-icon">${icon('brain',14)}</div><span>IA Analisando</span></div>
+                        <div class="progress-step-line"></div>
+                        <div class="progress-step" id="repoStep4"><div class="progress-step-icon">${icon('save',14)}</div><span>Salvando</span></div>
+                        <div class="progress-step-line"></div>
+                        <div class="progress-step" id="repoStep5"><div class="progress-step-icon">${icon('check-circle',14)}</div><span>Pronto</span></div>
+                    </div>`;
+                document.body.appendChild(overlay);
+                refreshIcons();
+
+                let pct = 5, labelIdx = 0, done = false;
+                const circ = 502;
+                const countInterval = setInterval(() => {
+                    if (done) return;
+                    if (pct < 30) pct += 2; else if (pct < 60) pct += 1; else if (pct < 80) pct += 0.5; else if (pct < 90) pct += 0.2;
+                    const v = Math.round(pct);
+                    const f = $('repoCircFill'), p = $('repoCircPct');
+                    if (f) f.style.strokeDashoffset = circ - (circ * v / 100);
+                    if (p) p.textContent = v + '%';
+                    if (v >= 5) { const s = $('repoStep1'); if (s) s.classList.add('active'); }
+                    if (v >= 20) { const s = $('repoStep2'); if (s) s.classList.add('active'); }
+                    if (v >= 45) { const s = $('repoStep3'); if (s) s.classList.add('active'); }
+                    if (v >= 85) { const s = $('repoStep4'); if (s) s.classList.add('active'); }
+                }, 150);
+                const labelInterval = setInterval(() => {
+                    if (done) return;
+                    if (labelIdx < labels.length - 1) labelIdx++;
+                    const el = $('repoCircLabel');
+                    if (el) el.textContent = labels[labelIdx];
+                }, 4000);
+
+                let tries = 0;
+                const poll = setInterval(async () => {
+                    tries++;
+                    try {
+                        const mr = await api('GET', `/orgs/${ORG_ID}/repos/${repoId}/mrs/${mrId}`);
+                        if (mr.status === 'approved' || mr.status === 'issues' || tries >= 30) {
+                            clearInterval(poll); done = true; clearInterval(countInterval); clearInterval(labelInterval);
+                            const f = $('repoCircFill'), p = $('repoCircPct'), l = $('repoCircLabel');
+                            if (f) { f.style.strokeDashoffset = 0; f.classList.add('done'); }
+                            if (p) p.textContent = '100%';
+                            if (l) l.textContent = 'Concluída!';
+                            const s5 = $('repoStep5'); if (s5) s5.classList.add('active');
+                            setTimeout(() => {
+                                const ov = $('repoAnalysisOverlay'); if (ov) ov.remove();
                                 b.disabled = false; b.textContent = 'Analisar Repositorio';
                                 openMRDetail(mrId, repoId);
                                 _onModalClose = () => { if (currentPage === 'repositories') loadRepos(); };
-                            }
-                        } catch (_) {
-                            if (tries >= 30) { clearInterval(poll); b.disabled = false; b.textContent = 'Analisar Repositorio'; }
+                            }, 1000);
                         }
-                    }, 3000);
-                } else { b.disabled = false; b.textContent = 'Analisar Repositorio'; }
+                    } catch (_) {
+                        if (tries >= 30) {
+                            clearInterval(poll); done = true; clearInterval(countInterval); clearInterval(labelInterval);
+                            const ov = $('repoAnalysisOverlay'); if (ov) ov.remove();
+                            b.disabled = false; b.textContent = 'Analisar Repositorio';
+                            toast('Tempo esgotado. Verifique manualmente.', 'error');
+                        }
+                    }
+                }, 3000);
             } catch (e) { toast(e.message || 'Erro ao analisar', 'error'); b.disabled = false; b.textContent = 'Analisar Repositorio'; }
         }));
         refreshIcons();
@@ -2699,7 +2758,7 @@
                     <div class="settings-row"><div class="settings-row-info"><h4>Status</h4><p>Verificar se o token é válido</p></div><div style="display:flex;align-items:center;gap:8px"><span id="tokenStatus" style="font-size:0.85rem;color:var(--text-tertiary)">${savedGitToken ? icon('check-circle', 14) + ' Token configurado' : icon('alert-circle', 14) + ' Nenhum token salvo'}</span></div></div>
                 </div>
             </div>
-            <div class="settings-section stagger-in" style="animation-delay:0.15s"><h3 class="settings-section-title">${icon('bot')} IA</h3><div class="settings-card"><div class="settings-row"><div class="settings-row-info"><h4>Modelo</h4><p>Modelo de IA para análise</p></div><select class="settings-input" style="min-width:180px"><option>Claude Sonnet 4.6</option><option>Claude Opus 4.6</option><option>GPT-4o</option></select></div><div class="settings-row"><div class="settings-row-info"><h4>Análise Automatica</h4><p>Analisar novos MRs automaticamente</p></div><button class="rule-toggle ${settings.auto_analyze ? 'active' : ''}" id="autoToggle"></button></div><div class="settings-row"><div class="settings-row-info"><h4>Score Minimo</h4><p>MRs abaixo serao sinalizados</p></div><input class="settings-input" type="number" min="0" max="100" value="${settings.min_score_threshold}" id="settingsMinScore" style="min-width:100px;text-align:center"></div></div></div>
+            <div class="settings-section stagger-in" style="animation-delay:0.15s"><h3 class="settings-section-title">${icon('bot')} IA</h3><div class="settings-card"><div class="settings-row"><div class="settings-row-info"><h4>Modelo</h4><p>Modelo de IA para análise</p></div><select class="settings-input" id="settingsAIModel" style="min-width:180px"><option value="claude-sonnet" ${(settings.ai_model||'') === 'claude-sonnet' ? 'selected' : ''}>Claude Sonnet 4.6</option><option value="claude-opus" ${(settings.ai_model||'') === 'claude-opus' ? 'selected' : ''}>Claude Opus 4.6</option><option value="gpt-4o" ${(!settings.ai_model || settings.ai_model === 'gpt-4o') ? 'selected' : ''}>GPT-4o</option></select></div><div class="settings-row"><div class="settings-row-info"><h4>Análise Automatica</h4><p>Analisar novos MRs automaticamente</p></div><button class="rule-toggle ${settings.auto_analyze ? 'active' : ''}" id="autoToggle"></button></div><div class="settings-row"><div class="settings-row-info"><h4>Score Minimo</h4><p>MRs abaixo serao sinalizados</p></div><input class="settings-input" type="number" min="0" max="100" value="${settings.min_score_threshold}" id="settingsMinScore" style="min-width:100px;text-align:center"></div></div></div>
             <div class="settings-section stagger-in" style="animation-delay:0.3s"><h3 class="settings-section-title">${icon('bell')} Notificações</h3><div class="settings-card"><div class="settings-row"><div class="settings-row-info"><h4>E-mail</h4><p>E-mail para notificacoes</p></div><input class="settings-input" type="email" value="${esc(settings.notification_email || '')}" id="settingsEmail" placeholder="equipe@empresa.com"></div><div class="settings-row"><div class="settings-row-info"><h4>Webhook Slack</h4></div><input class="settings-input" type="text" value="${esc(settings.slack_webhook_url || '')}" id="settingsSlack" placeholder="https://hooks.slack.com/..."></div><div class="settings-row"><div class="settings-row-info"><h4>Webhook Discord</h4></div><input class="settings-input" type="text" value="${esc(settings.discord_webhook_url || '')}" id="settingsDiscord" placeholder="https://discord.com/api/webhooks/..."></div></div></div>
             <div style="margin-top:20px"><button class="btn btn-primary" id="btnSaveSettings">${icon('save')} Salvar Configurações</button></div>`;
 
@@ -2728,6 +2787,7 @@
                     notification_email: $('settingsEmail').value,
                     slack_webhook_url: $('settingsSlack').value,
                     discord_webhook_url: $('settingsDiscord').value,
+                    ai_model: $('settingsAIModel').value,
                 });
                 toast('Configurações salvas!');
             } catch (e) { toast(e.message || 'Erro ao salvar', 'error'); }

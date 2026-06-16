@@ -28,6 +28,7 @@ class OrgSettingsUpdate(BaseModel):
     notification_email: str | None = None
     slack_webhook_url: str | None = None
     discord_webhook_url: str | None = None
+    ai_model: str | None = None
 
 
 class OrgSettingsOut(BaseModel):
@@ -38,3 +39,4 @@ class OrgSettingsOut(BaseModel):
     notification_email: str | None
     slack_webhook_url: str | None
     discord_webhook_url: str | None
+    ai_model: str | None = None

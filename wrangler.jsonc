@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "codexify",
+  "compatibility_date": "2026-06-10",
+  "observability": {
+    "enabled": true
+  },
+  "assets": {
+    "directory": "codeguard-ai"
+  },
+  "compatibility_flags": [
+    "nodejs_compat"
+  ]
+}
